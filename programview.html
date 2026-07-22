@@ -362,6 +362,7 @@
         G353: "Reaming",
         G354: "Tapping",
         G356: "Circle Mill",
+        G362: "Line Center",
         G369: "Chamfer Out",
         G380: "Offset",
         G371: "Cycle",
@@ -435,6 +436,10 @@
         },
         tapping: {
           commands: ["G354"],
+          fields: {}
+        },
+        lineCenter: {
+          commands: ["G362"],
           fields: {}
         },
         circleMill: {
@@ -986,6 +991,70 @@
       };
     }
 
+    // G362 Line Center rules. Isolated from the existing G371 Face Mill unit.
+    function lineCenterValue(block, key, occurrence = 0) {
+      const parameter = manualParameter(block, key, occurrence);
+      return parameter ? contextualValue(parameter).replace(/^&/, "") : "";
+    }
+
+    function parseLineCenterHeader(block) {
+      const boundaryCode = manualParameter(block, "A")?.value ?? null;
+      return {
+        unitName: "LINE CTR",
+        depth: lineCenterValue(block, "H", 0),
+        serviceZ: lineCenterValue(block, "Z", 0),
+        serviceRadius: lineCenterValue(block, "R", 0),
+        rough: lineCenterValue(block, "F", 0),
+        finishZ: lineCenterValue(block, "Z", 1),
+        start: boundaryCode === 0 ? "OPEN" : "",
+        end: boundaryCode === 0 ? "OPEN" : "",
+        raw: block.raw
+      };
+    }
+
+    function parseLineCenterToolRow(block) {
+      const toolNumber = manualParameter(block, "T")?.value ?? null;
+      const sCode = manualParameter(block, "S")?.value ?? null;
+      const priorityInfo = parsedPriority(block);
+      return {
+        sequenceNumber: Number(block.command.slice(1)),
+        toolNumber,
+        toolName: block.comments[0] || CONTEXTUAL_MAPPING_DICTIONARY.toolCallouts[toolNumber] || "FCE MILL",
+        nominalDiameter: lineCenterValue(block, "D", 0),
+        diameterFlag: sCode === -8 ? "H" : "",
+        priority: priorityInfo.rawValue || "",
+        priorityIsLate: priorityInfo.isLate,
+        approachX: lineCenterValue(block, "X", 0),
+        approachY: lineCenterValue(block, "Y", 0),
+        processType: "♦",
+        zfd: "G01",
+        depthZ: lineCenterValue(block, "Z", 0),
+        widthR: "♦",
+        cuttingSpeed: lineCenterValue(block, "I", 0),
+        feedRate: lineCenterValue(block, "J", 0),
+        mCodes: [lineCenterValue(block, "MA"), lineCenterValue(block, "MB"), lineCenterValue(block, "MC")],
+        raw: block.raw
+      };
+    }
+
+    function parseLineCenterGeometryRow(block) {
+      const cornerRadius = lineCenterValue(block, "R", 0);
+      return {
+        sequenceNumber: Number(block.command.slice(1)),
+        pattern: manualParameter(block, "A")?.value === 1 ? "LINE" : "",
+        x: lineCenterValue(block, "X", 0),
+        y: lineCenterValue(block, "Y", 0),
+        radiusThickness: "",
+        i: "",
+        j: "",
+        p: "",
+        cornerRadius: cornerRadius ? `R ${cornerRadius}` : "",
+        radiusFeed: "",
+        rough: "",
+        raw: block.raw
+      };
+    }
+
     // G303 Sub Program rules. Isolated so existing Unit types remain unchanged.
     function parseSubProgramHeader(block) {
       const repeatParameter = manualParameter(block, "F");
@@ -1149,6 +1218,15 @@
       if (unitType === "tapping" && /^N\d+$/i.test(block.command) && context.sectionCommand === "G420") {
         block.tappingGeometryRow = parseTappingGeometryRow(block);
       }
+      if (unitType === "lineCenter" && block.command === "G362") {
+        block.lineCenterHeader = parseLineCenterHeader(block);
+      }
+      if (unitType === "lineCenter" && /^N\d+$/i.test(block.command) && context.sectionCommand === "G424") {
+        block.lineCenterToolRow = parseLineCenterToolRow(block);
+      }
+      if (unitType === "lineCenter" && /^N\d+$/i.test(block.command) && context.sectionCommand === "G420") {
+        block.lineCenterGeometryRow = parseLineCenterGeometryRow(block);
+      }
       if (unitType === "subProgram" && block.command === "G303") {
         block.subProgramHeader = parseSubProgramHeader(block);
       }
@@ -1210,6 +1288,7 @@
               drillingHeader: block.drillingHeader || null,
               reamingHeader: block.reamingHeader || null,
               tappingHeader: block.tappingHeader || null,
+              lineCenterHeader: block.lineCenterHeader || null,
               subProgramHeader: block.subProgramHeader || null,
               chamferOutHeader: block.chamferOutHeader || null,
               endProgramHeader: block.endProgramHeader || null,
@@ -1231,6 +1310,7 @@
           if (block.drillingHeader) currentUnit.drillingHeader = block.drillingHeader;
           if (block.reamingHeader) currentUnit.reamingHeader = block.reamingHeader;
           if (block.tappingHeader) currentUnit.tappingHeader = block.tappingHeader;
+          if (block.lineCenterHeader) currentUnit.lineCenterHeader = block.lineCenterHeader;
           if (block.subProgramHeader) currentUnit.subProgramHeader = block.subProgramHeader;
           if (block.chamferOutHeader) currentUnit.chamferOutHeader = block.chamferOutHeader;
           if (block.endProgramHeader) currentUnit.endProgramHeader = block.endProgramHeader;
@@ -1261,6 +1341,8 @@
             reamingGeometryRow: block.reamingGeometryRow || null,
             tappingToolRow: block.tappingToolRow || null,
             tappingGeometryRow: block.tappingGeometryRow || null,
+            lineCenterToolRow: block.lineCenterToolRow || null,
+            lineCenterGeometryRow: block.lineCenterGeometryRow || null,
             chamferOutToolRow: block.chamferOutToolRow || null,
             chamferOutGeometryRow: block.chamferOutGeometryRow || null,
             priority: block.priority,
@@ -1369,6 +1451,9 @@
     window.parseTappingHeader = parseTappingHeader;
     window.parseTappingToolRow = parseTappingToolRow;
     window.parseTappingGeometryRow = parseTappingGeometryRow;
+    window.parseLineCenterHeader = parseLineCenterHeader;
+    window.parseLineCenterToolRow = parseLineCenterToolRow;
+    window.parseLineCenterGeometryRow = parseLineCenterGeometryRow;
     window.parseSubProgramHeader = parseSubProgramHeader;
     window.parseEndProgramHeader = parseEndProgramHeader;
     window.parseChamferOutHeader = parseChamferOutHeader;
@@ -1433,7 +1518,8 @@
           sequence.circleMillGeometryRow || block.circleMillGeometryRow ||
           sequence.drillingGeometryRow || block.drillingGeometryRow ||
           sequence.reamingGeometryRow || block.reamingGeometryRow ||
-          sequence.tappingGeometryRow || block.tappingGeometryRow;
+          sequence.tappingGeometryRow || block.tappingGeometryRow ||
+          sequence.lineCenterGeometryRow || block.lineCenterGeometryRow;
         const manualRow = sequence.manualRow || block.manualRow;
 
         if (faceRow || chamferRow) {
@@ -1529,6 +1615,7 @@
             sequence.drillingToolRow || block.drillingToolRow ||
             sequence.reamingToolRow || block.reamingToolRow ||
             sequence.tappingToolRow || block.tappingToolRow ||
+            sequence.lineCenterToolRow || block.lineCenterToolRow ||
             sequence.chamferOutToolRow || block.chamferOutToolRow;
           if (row) {
             addCallout(unit, row, sequence.id, calloutIndex, unitLocations);
@@ -1974,6 +2061,52 @@
       return `<section class="mz-unit">${renderMzTable(headers, [row], "unit-head")}${renderTappingTools(unit)}${renderTappingGeometry(unit)}</section>`;
     }
 
+    function renderLineCenterTools(unit) {
+      const sequences = unit.sequences.filter(sequence => sequence.contextCommand === "G424");
+      if (!sequences.length) return "";
+      const headers = ["SNo.", "TOOL", "NOM-Ø", "", "No.", "APRCH-X", "APRCH-Y", "TYPE", "ZFD", "DEP-Z", "WID-R", "C-SP", "FR", "M", "M", "M"].map(label => ({ label }));
+      const rows = sequences.map(sequence => {
+        const block = sequence.blocks[0];
+        const row = sequence.lineCenterToolRow || block.lineCenterToolRow || parseLineCenterToolRow(block);
+        return [
+          mzCell(`R ${row.sequenceNumber}`, "row-no"), mzCell(row.toolName, "op", `Tool No. ${row.toolNumber ?? ""}`),
+          mzCell(row.nominalDiameter), mzCell(row.diameterFlag, "red"), mzCell(row.priority, row.priorityIsLate ? "magenta" : "priority", "Execution priority"),
+          mzCell(row.approachX, "yellow"), mzCell(row.approachY, "yellow"), mzCell(row.processType, "diamond"),
+          mzCell(row.zfd, "green left"), mzCell(row.depthZ), mzCell(row.widthR, "diamond"),
+          mzCell(row.cuttingSpeed), mzCell(row.feedRate), ...row.mCodes.map(code => mzCell(code))
+        ];
+      });
+      return renderMzTable(headers, rows, "tool-head");
+    }
+
+    function renderLineCenterGeometry(unit) {
+      const sequences = unit.sequences.filter(sequence => sequence.contextCommand === "G420");
+      if (!sequences.length) return "";
+      const headers = ["FIG", "PTN", "X", "Y", "R/th", "I", "J", "P", "CNR", "R-FEED", "RGH"].map(label => ({ label }));
+      const rows = sequences.map(sequence => {
+        const block = sequence.blocks[0];
+        const row = sequence.lineCenterGeometryRow || block.lineCenterGeometryRow || parseLineCenterGeometryRow(block);
+        return [
+          mzCell(row.sequenceNumber, "row-no"), mzCell(row.pattern, "op"), mzCell(row.x), mzCell(row.y),
+          mzCell(row.radiusThickness), mzCell(row.i), mzCell(row.j), mzCell(row.p),
+          mzCell(row.cornerRadius, row.cornerRadius ? "yellow left" : ""), mzCell(row.radiusFeed), mzCell(row.rough)
+        ];
+      });
+      return renderMzTable(headers, rows, "fig-head");
+    }
+
+    function renderLineCenterUnit(unit) {
+      const cycle = blockFor(unit, "G362") || unit.blocks[0];
+      const header = unit.lineCenterHeader || cycle?.lineCenterHeader || parseLineCenterHeader(cycle);
+      const headers = ["Unit No.", "UNIT", "", "DEPTH", "SRV-Z", "SRV-R", "RGH", "FIN-Z", "START", "END", ""].map(label => ({ label }));
+      const row = [
+        mzCell(unit.number, "row-no"), mzCell(header.unitName, "op"), mzCell(""), mzCell(header.depth),
+        mzCell(header.serviceZ), mzCell(header.serviceRadius), mzCell(header.rough), mzCell(header.finishZ),
+        mzCell(header.start, "left"), mzCell(header.end, "left"), mzCell("")
+      ];
+      return `<section class="mz-unit">${renderMzTable(headers, [row], "unit-head")}${renderLineCenterTools(unit)}${renderLineCenterGeometry(unit)}</section>`;
+    }
+
     function renderSubProgramUnit(unit) {
       const block = blockFor(unit, "G303") || unit.blocks[0];
       const header = unit.subProgramHeader || block?.subProgramHeader || parseSubProgramHeader(block);
@@ -2109,6 +2242,7 @@
       if (blockFor(unit, "G350")) return "drilling";
       if (blockFor(unit, "G353")) return "reaming";
       if (blockFor(unit, "G354")) return "tapping";
+      if (blockFor(unit, "G362")) return "lineCenter";
       if (blockFor(unit, "G356")) return "circleMill";
       if (blockFor(unit, "G369")) return "chamferOut";
       if (blockFor(unit, "G357")) return "drillTap";
@@ -2126,6 +2260,7 @@
         drilling: renderDrillingUnit,
         reaming: renderReamingUnit,
         tapping: renderTappingUnit,
+        lineCenter: renderLineCenterUnit,
         circleMill: renderCircleMillUnit,
         chamferOut: renderChamferOutUnit,
         drillTap: renderDrillTapUnit,
