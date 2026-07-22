@@ -893,9 +893,12 @@
     }
 
     function parseManualSequenceRow(block) {
-      const dataKeys = ["X", "Y", "Z", "F"];
+      // Manual-program addresses use fixed display slots. Both feed (F) and
+      // macro/program value (P) occupy DATA 4 on the Mazatrol monitor.
+      const dataKeysBySlot = [["X"], ["Y"], ["Z"], ["F", "P"], [], []];
       const data = Array.from({ length: 6 }, (_, index) => {
-        const key = dataKeys[index];
+        const keys = dataKeysBySlot[index];
+        const key = keys.find(candidate => manualParameter(block, candidate));
         const parameter = key ? manualParameter(block, key) : null;
         return parameter
           ? { address: key, value: contextualValue(parameter), rawToken: parameter.rawToken }
