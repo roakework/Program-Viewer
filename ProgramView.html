@@ -864,6 +864,14 @@
       return normalizePriority(manualParameter(block, "P"));
     }
 
+    // Mazatrol tool suffix codes use A-Z while omitting I and O.
+    // S1=A, S2=B, ... S8=H, S9=J, ... S23=Y, S24=Z.
+    const MAZATROL_TOOL_LETTERS = ["", "A", "B", "C", "D", "E", "F", "G", "H", "J", "K", "L", "M", "N", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z"];
+
+    function toolLetterFromS(sCode) {
+      return Number.isInteger(sCode) && sCode > 0 ? (MAZATROL_TOOL_LETTERS[sCode] || "") : "";
+    }
+
     function parseManualUnitHeader(block) {
       const toolParameter = manualParameter(block, "T");
       const diameterParameter = manualParameter(block, "D");
@@ -877,7 +885,7 @@
         toolName: block.comments[0] || CONTEXTUAL_MAPPING_DICTIONARY.toolCallouts[toolNumber] ||
           (toolNumber !== null ? `TOOL ${toolNumber}` : "UNMAPPED"),
         nominalDiameter: contextualValue(diameterParameter),
-        toolFlag: toolCodeParameter?.value === 3 ? "C" : "",
+        toolFlag: toolLetterFromS(toolCodeParameter?.value),
         priority: priorityInfo.rawValue || "",
         priorityIsLate: priorityInfo.isLate,
         raw: block.raw
@@ -935,7 +943,7 @@
         toolNumber,
         toolName: block.comments[0] || CONTEXTUAL_MAPPING_DICTIONARY.toolCallouts[toolNumber] || "FCE MILL",
         nominalDiameter: faceMillValue(block, "D"),
-        diameterFlag: sCode === -8 ? "H" : "",
+        diameterFlag: sCode === -8 ? "H" : toolLetterFromS(sCode),
         priority: priorityInfo.rawValue || "",
         priorityIsLate: priorityInfo.isLate,
         approachX: faceMillValue(block, "X"),
@@ -995,7 +1003,6 @@
       const isTap = toolName === "TAP" || toolNumber === 5;
       const sCode = manualParameter(block, "S")?.value ?? null;
       const fCode = manualParameter(block, "F")?.value ?? null;
-      const flagByS = { 23: "Y", 24: "Z", 3: "C" };
       const secondE = manualParameter(block, "E", 1)?.value ?? null;
       const rough = isTap ? "FIX" : fCode === 19 ? "PCK2" : fCode === 2 ? "PCK1" : "DRIL";
       const priorityInfo = parsedPriority(block);
@@ -1006,7 +1013,7 @@
         nominalDiameter: isTap
           ? `UN${drillTapValue(block, "D", 0)}S-${drillTapValue(block, "V", 0)}`
           : drillTapValue(block, "D", 0),
-        toolFlag: isTap ? "P" : (flagByS[sCode] || ""),
+        toolFlag: toolLetterFromS(sCode),
         priority: priorityInfo.rawValue || "",
         priorityIsLate: priorityInfo.isLate,
         holeDiameter: drillTapValue(block, "E", 0),
@@ -1063,6 +1070,7 @@
 
     function parseCircleMillToolRow(block) {
       const toolNumber = manualParameter(block, "T")?.value ?? null;
+      const sCode = manualParameter(block, "S")?.value ?? null;
       const secondH = manualParameter(block, "H", 1)?.value ?? null;
       const priorityInfo = parsedPriority(block);
       return {
@@ -1070,7 +1078,7 @@
         toolNumber,
         toolName: block.comments[0] || CONTEXTUAL_MAPPING_DICTIONARY.toolCallouts[toolNumber] || "END MILL",
         nominalDiameter: circleMillValue(block, "D", 0),
-        toolFlag: "",
+        toolFlag: toolLetterFromS(sCode),
         priority: priorityInfo.rawValue || "",
         priorityIsLate: priorityInfo.isLate,
         holeDiameter: circleMillValue(block, "E", 0),
@@ -1123,14 +1131,13 @@
       const toolNumber = manualParameter(block, "T")?.value ?? null;
       const sCode = manualParameter(block, "S")?.value ?? null;
       const fCode = manualParameter(block, "F")?.value ?? null;
-      const flagByS = { 23: "Y", 24: "Z", 3: "C" };
       const priorityInfo = parsedPriority(block);
       return {
         sequenceNumber: Number(block.command.slice(1)),
         toolNumber,
         toolName: block.comments[0] || CONTEXTUAL_MAPPING_DICTIONARY.toolCallouts[toolNumber] || "DRILL",
         nominalDiameter: drillingValue(block, "D", 0),
-        toolFlag: flagByS[sCode] || "",
+        toolFlag: toolLetterFromS(sCode),
         priority: priorityInfo.rawValue || "",
         priorityIsLate: priorityInfo.isLate,
         holeDiameter: drillingValue(block, "E", 0),
@@ -1183,13 +1190,14 @@
 
     function parseReamingToolRow(block) {
       const toolNumber = manualParameter(block, "T")?.value ?? null;
+      const sCode = manualParameter(block, "S")?.value ?? null;
       const priorityInfo = parsedPriority(block);
       return {
         sequenceNumber: Number(block.command.slice(1)),
         toolNumber,
         toolName: block.comments[0] || CONTEXTUAL_MAPPING_DICTIONARY.toolCallouts[toolNumber] || "REAMER",
         nominalDiameter: reamingValue(block, "D", 0),
-        toolFlag: "",
+        toolFlag: toolLetterFromS(sCode),
         priority: priorityInfo.rawValue || "",
         priorityIsLate: priorityInfo.isLate,
         holeDiameter: reamingValue(block, "E", 0),
@@ -1248,14 +1256,13 @@
       const priorityInfo = parsedPriority(block);
       const isCenterDrill = toolNumber === 1;
       const isTap = toolNumber === 4;
-      const flagByS = { 2: "B", 6: "F" };
       const nominal = tappingValue(block, "D", 0);
       return {
         sequenceNumber: Number(block.command.slice(1)),
         toolNumber,
         toolName: block.comments[0] || CONTEXTUAL_MAPPING_DICTIONARY.toolCallouts[toolNumber] || (isTap ? "TAP" : "DRILL"),
         nominalDiameter: isTap ? `M${nominal}` : nominal,
-        toolFlag: flagByS[sCode] || "",
+        toolFlag: toolLetterFromS(sCode),
         priority: priorityInfo.rawValue || "",
         priorityIsLate: priorityInfo.isLate,
         holeDiameter: tappingValue(block, "E", 0),
@@ -1318,7 +1325,7 @@
         toolNumber,
         toolName: block.comments[0] || CONTEXTUAL_MAPPING_DICTIONARY.toolCallouts[toolNumber] || "FCE MILL",
         nominalDiameter: lineCenterValue(block, "D", 0),
-        diameterFlag: sCode === -8 ? "H" : "",
+        diameterFlag: sCode === -8 ? "H" : toolLetterFromS(sCode),
         priority: priorityInfo.rawValue || "",
         priorityIsLate: priorityInfo.isLate,
         approachX: lineCenterValue(block, "X", 0),
@@ -1374,6 +1381,7 @@
 
     function parseSlotToolRow(block) {
       const toolNumber = manualParameter(block, "T")?.value ?? null;
+      const sCode = manualParameter(block, "S")?.value ?? null;
       const priorityInfo = parsedPriority(block);
       const passCode = manualParameter(block, "B")?.value ?? null;
       const directionCode = manualParameter(block, "Q")?.value ?? null;
@@ -1384,7 +1392,7 @@
         toolNumber,
         toolName: block.comments[0] || CONTEXTUAL_MAPPING_DICTIONARY.toolCallouts[toolNumber] || "END MILL",
         nominalDiameter: slotValue(block, "D", 0),
-        toolFlag: "",
+        toolFlag: toolLetterFromS(sCode),
         priority: priorityInfo.rawValue || "",
         priorityIsLate: priorityInfo.isLate,
         approachX: slotValue(block, "X", 0),
@@ -1472,6 +1480,7 @@
 
     function parseChamferOutToolRow(block) {
       const toolNumber = manualParameter(block, "T")?.value ?? null;
+      const sCode = manualParameter(block, "S")?.value ?? null;
       const priorityInfo = parsedPriority(block);
       const qCode = manualParameter(block, "Q")?.value ?? null;
       const fCode = manualParameter(block, "F")?.value ?? null;
@@ -1480,6 +1489,7 @@
         toolNumber,
         toolName: block.comments[0] || CONTEXTUAL_MAPPING_DICTIONARY.toolCallouts[toolNumber] || "CHAMFER",
         nominalDiameter: chamferOutValue(block, "D", 0),
+        toolFlag: toolLetterFromS(sCode),
         priority: priorityInfo.rawValue || "",
         priorityIsLate: priorityInfo.isLate,
         approachX: chamferOutValue(block, "X", 0),
@@ -1839,6 +1849,7 @@
     window.parseChamferOutHeader = parseChamferOutHeader;
     window.parseChamferOutToolRow = parseChamferOutToolRow;
     window.parseChamferOutGeometryRow = parseChamferOutGeometryRow;
+    window.toolLetterFromS = toolLetterFromS;
     window.CONTEXTUAL_MAPPING_DICTIONARY = CONTEXTUAL_MAPPING_DICTIONARY;
     // ---------- End parser engine ----------
 
@@ -2232,7 +2243,7 @@
         return [
           mzCell(`R ${row.sequenceNumber}`, "row-no"),
           mzCell(row.toolName, "op", `Tool No. ${row.toolNumber ?? ""}`),
-          mzCell(row.nominalDiameter), mzCell(row.diameterFlag, "red"),
+          mzCell(row.nominalDiameter), mzCell(row.diameterFlag, row.diameterFlag === "H" ? "red" : "green"),
           mzCell(row.priority, row.priorityIsLate ? "magenta" : "priority", "Execution priority"),
           mzCell(row.approachX, "yellow"), mzCell(row.approachY, "yellow"), mzCell(row.processType, "left"),
           mzCell(row.zfd, "diamond"), mzCell(row.depthZ), mzCell(row.widthR),
@@ -2307,7 +2318,7 @@
         const row = sequence.circleMillToolRow || block.circleMillToolRow || parseCircleMillToolRow(block);
         return [
           mzCell(row.sequenceNumber, "row-no"), mzCell(row.toolName, "op", `Tool No. ${row.toolNumber ?? ""}`),
-          mzCell(row.nominalDiameter), mzCell(row.toolFlag), mzCell(row.priority, row.priorityIsLate ? "magenta" : "priority", "Execution priority"),
+          mzCell(row.nominalDiameter), mzCell(row.toolFlag, "green"), mzCell(row.priority, row.priorityIsLate ? "magenta" : "priority", "Execution priority"),
           mzCell(row.holeDiameter), mzCell(row.holeDepth), mzCell(row.preDiameter, "diamond"), mzCell(row.preDepth, row.preDepth === "CCW" ? "magenta" : ""),
           mzCell(row.rough), mzCell(`${row.depthAddress}${row.depth}`, "op left"), mzCell(row.peckDepth, "diamond"),
           mzCell(row.cuttingSpeed), mzCell(row.feedRate), ...row.mCodes.map(code => mzCell(code))
@@ -2471,7 +2482,7 @@
         const row = sequence.lineCenterToolRow || block.lineCenterToolRow || parseLineCenterToolRow(block);
         return [
           mzCell(`R ${row.sequenceNumber}`, "row-no"), mzCell(row.toolName, "op", `Tool No. ${row.toolNumber ?? ""}`),
-          mzCell(row.nominalDiameter), mzCell(row.diameterFlag, "red"), mzCell(row.priority, row.priorityIsLate ? "magenta" : "priority", "Execution priority"),
+          mzCell(row.nominalDiameter), mzCell(row.diameterFlag, row.diameterFlag === "H" ? "red" : "green"), mzCell(row.priority, row.priorityIsLate ? "magenta" : "priority", "Execution priority"),
           mzCell(row.approachX, "yellow"), mzCell(row.approachY, "yellow"), mzCell(row.processType, "diamond"),
           mzCell(row.zfd, "green left"), mzCell(row.depthZ), mzCell(row.widthR, "diamond"),
           mzCell(row.cuttingSpeed), mzCell(row.feedRate), ...row.mCodes.map(code => mzCell(code))
@@ -2517,7 +2528,7 @@
         const row = sequence.slotToolRow || block.slotToolRow || parseSlotToolRow(block);
         return [
           mzCell(`${row.rowMode} ${row.sequenceNumber}`, "row-no"), mzCell(row.toolName, "op", `Tool No. ${row.toolNumber ?? ""}`),
-          mzCell(row.nominalDiameter), mzCell(row.toolFlag), mzCell(row.priority, row.priorityIsLate ? "magenta" : "priority", "Execution priority"),
+          mzCell(row.nominalDiameter), mzCell(row.toolFlag, "green"), mzCell(row.priority, row.priorityIsLate ? "magenta" : "priority", "Execution priority"),
           mzCell(row.approachX, "yellow"), mzCell(row.approachY, "yellow"), mzCell(row.processType), mzCell(row.zfd, "green left"),
           mzCell(row.secondaryType), mzCell(row.peckDepth, "diamond"), mzCell(row.depthZ, row.depthZ === "♦" ? "diamond" : ""),
           mzCell(row.widthR, "diamond"), mzCell(row.cuttingSpeed), mzCell(row.feedRate), ...row.mCodes.map(code => mzCell(code))
@@ -2590,7 +2601,7 @@
         const row = sequence.chamferOutToolRow || block.chamferOutToolRow || parseChamferOutToolRow(block);
         return [
           mzCell(row.sequenceNumber, "row-no"), mzCell(row.toolName, "op", `Tool No. ${row.toolNumber ?? ""}`),
-          mzCell(row.nominalDiameter), mzCell(""), mzCell(row.priority, row.priorityIsLate ? "magenta" : "priority", "Execution priority"),
+          mzCell(row.nominalDiameter), mzCell(row.toolFlag, "green"), mzCell(row.priority, row.priorityIsLate ? "magenta" : "priority", "Execution priority"),
           mzCell(row.approachX, "yellow"), mzCell(row.approachY, "yellow"), mzCell(row.processType, "left"),
           mzCell(row.zfd, "green left"), mzCell(row.depthZ, "diamond"), mzCell(row.widthR),
           mzCell(row.cuttingSpeed), mzCell(row.feedRate), ...row.mCodes.map(code => mzCell(code))
