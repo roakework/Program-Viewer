@@ -364,6 +364,7 @@
         G356: "Circle Mill",
         G362: "Line Center",
         G369: "Chamfer Out",
+        G377: "Slot",
         G380: "Offset",
         G371: "Cycle",
         G424: "Tool Process",
@@ -440,6 +441,10 @@
         },
         lineCenter: {
           commands: ["G362"],
+          fields: {}
+        },
+        slot: {
+          commands: ["G377"],
           fields: {}
         },
         circleMill: {
@@ -1055,6 +1060,73 @@
       };
     }
 
+    // G377 Slot rules. Isolated from G305 manual units that may share Unit 5.
+    function slotValue(block, key, occurrence = 0) {
+      const parameter = manualParameter(block, key, occurrence);
+      return parameter ? contextualValue(parameter).replace(/^&/, "") : "";
+    }
+
+    function parseSlotHeader(block) {
+      return {
+        unitName: "SLOT",
+        depth: slotValue(block, "H", 0),
+        serviceZ: slotValue(block, "Z", 0),
+        slotWidth: slotValue(block, "D", 0),
+        bottom: slotValue(block, "I", 0),
+        wall: slotValue(block, "J", 0),
+        finishZ: slotValue(block, "Z", 1),
+        finishRadius: slotValue(block, "R", 0),
+        raw: block.raw
+      };
+    }
+
+    function parseSlotToolRow(block) {
+      const toolNumber = manualParameter(block, "T")?.value ?? null;
+      const priorityInfo = parsedPriority(block);
+      const passCode = manualParameter(block, "B")?.value ?? null;
+      const directionCode = manualParameter(block, "Q")?.value ?? null;
+      const depthZ = slotValue(block, "Z", 0);
+      return {
+        sequenceNumber: Number(block.command.slice(1)),
+        rowMode: passCode === 1 ? "F" : "R",
+        toolNumber,
+        toolName: block.comments[0] || CONTEXTUAL_MAPPING_DICTIONARY.toolCallouts[toolNumber] || "END MILL",
+        nominalDiameter: slotValue(block, "D", 0),
+        toolFlag: "",
+        priority: priorityInfo.rawValue || "",
+        priorityIsLate: priorityInfo.isLate,
+        approachX: slotValue(block, "X", 0),
+        approachY: slotValue(block, "Y", 0),
+        processType: directionCode === 8 ? "CCW" : "",
+        zfd: "G01",
+        secondaryType: "",
+        peckDepth: "♦",
+        depthZ: depthZ || "♦",
+        widthR: "♦",
+        cuttingSpeed: slotValue(block, "I", 0),
+        feedRate: slotValue(block, "J", 0),
+        mCodes: [slotValue(block, "MA"), slotValue(block, "MB"), slotValue(block, "MC")],
+        raw: block.raw
+      };
+    }
+
+    function parseSlotGeometryRow(block) {
+      return {
+        sequenceNumber: Number(block.command.slice(1)),
+        pattern: manualParameter(block, "A")?.value === 2 ? "CW" : "",
+        x: slotValue(block, "X", 0),
+        y: slotValue(block, "Y", 0),
+        radiusThickness: slotValue(block, "V", 0),
+        i: slotValue(block, "I", 0),
+        j: slotValue(block, "J", 0),
+        p: "",
+        cornerRadius: "",
+        radiusFeed: "♦",
+        rough: "",
+        raw: block.raw
+      };
+    }
+
     // G303 Sub Program rules. Isolated so existing Unit types remain unchanged.
     function parseSubProgramHeader(block) {
       const repeatParameter = manualParameter(block, "F");
@@ -1227,6 +1299,15 @@
       if (unitType === "lineCenter" && /^N\d+$/i.test(block.command) && context.sectionCommand === "G420") {
         block.lineCenterGeometryRow = parseLineCenterGeometryRow(block);
       }
+      if (unitType === "slot" && block.command === "G377") {
+        block.slotHeader = parseSlotHeader(block);
+      }
+      if (unitType === "slot" && /^N\d+$/i.test(block.command) && context.sectionCommand === "G424") {
+        block.slotToolRow = parseSlotToolRow(block);
+      }
+      if (unitType === "slot" && /^N\d+$/i.test(block.command) && context.sectionCommand === "G420") {
+        block.slotGeometryRow = parseSlotGeometryRow(block);
+      }
       if (unitType === "subProgram" && block.command === "G303") {
         block.subProgramHeader = parseSubProgramHeader(block);
       }
@@ -1289,6 +1370,7 @@
               reamingHeader: block.reamingHeader || null,
               tappingHeader: block.tappingHeader || null,
               lineCenterHeader: block.lineCenterHeader || null,
+              slotHeader: block.slotHeader || null,
               subProgramHeader: block.subProgramHeader || null,
               chamferOutHeader: block.chamferOutHeader || null,
               endProgramHeader: block.endProgramHeader || null,
@@ -1311,6 +1393,7 @@
           if (block.reamingHeader) currentUnit.reamingHeader = block.reamingHeader;
           if (block.tappingHeader) currentUnit.tappingHeader = block.tappingHeader;
           if (block.lineCenterHeader) currentUnit.lineCenterHeader = block.lineCenterHeader;
+          if (block.slotHeader) currentUnit.slotHeader = block.slotHeader;
           if (block.subProgramHeader) currentUnit.subProgramHeader = block.subProgramHeader;
           if (block.chamferOutHeader) currentUnit.chamferOutHeader = block.chamferOutHeader;
           if (block.endProgramHeader) currentUnit.endProgramHeader = block.endProgramHeader;
@@ -1343,6 +1426,8 @@
             tappingGeometryRow: block.tappingGeometryRow || null,
             lineCenterToolRow: block.lineCenterToolRow || null,
             lineCenterGeometryRow: block.lineCenterGeometryRow || null,
+            slotToolRow: block.slotToolRow || null,
+            slotGeometryRow: block.slotGeometryRow || null,
             chamferOutToolRow: block.chamferOutToolRow || null,
             chamferOutGeometryRow: block.chamferOutGeometryRow || null,
             priority: block.priority,
@@ -1454,6 +1539,9 @@
     window.parseLineCenterHeader = parseLineCenterHeader;
     window.parseLineCenterToolRow = parseLineCenterToolRow;
     window.parseLineCenterGeometryRow = parseLineCenterGeometryRow;
+    window.parseSlotHeader = parseSlotHeader;
+    window.parseSlotToolRow = parseSlotToolRow;
+    window.parseSlotGeometryRow = parseSlotGeometryRow;
     window.parseSubProgramHeader = parseSubProgramHeader;
     window.parseEndProgramHeader = parseEndProgramHeader;
     window.parseChamferOutHeader = parseChamferOutHeader;
@@ -1519,7 +1607,8 @@
           sequence.drillingGeometryRow || block.drillingGeometryRow ||
           sequence.reamingGeometryRow || block.reamingGeometryRow ||
           sequence.tappingGeometryRow || block.tappingGeometryRow ||
-          sequence.lineCenterGeometryRow || block.lineCenterGeometryRow;
+          sequence.lineCenterGeometryRow || block.lineCenterGeometryRow ||
+          sequence.slotGeometryRow || block.slotGeometryRow;
         const manualRow = sequence.manualRow || block.manualRow;
 
         if (faceRow || chamferRow) {
@@ -1616,6 +1705,7 @@
             sequence.reamingToolRow || block.reamingToolRow ||
             sequence.tappingToolRow || block.tappingToolRow ||
             sequence.lineCenterToolRow || block.lineCenterToolRow ||
+            sequence.slotToolRow || block.slotToolRow ||
             sequence.chamferOutToolRow || block.chamferOutToolRow;
           if (row) {
             addCallout(unit, row, sequence.id, calloutIndex, unitLocations);
@@ -2107,6 +2197,52 @@
       return `<section class="mz-unit">${renderMzTable(headers, [row], "unit-head")}${renderLineCenterTools(unit)}${renderLineCenterGeometry(unit)}</section>`;
     }
 
+    function renderSlotTools(unit) {
+      const sequences = unit.sequences.filter(sequence => sequence.contextCommand === "G424");
+      if (!sequences.length) return "";
+      const headers = ["SNo.", "TOOL", "NOM-Ø", "", "No.", "APRCH-X", "APRCH-Y", "TYPE", "ZFD", "TYPE", "PK-DEP", "DEP-Z", "WID-R", "C-SP", "FR", "M", "M", "M"].map(label => ({ label }));
+      const rows = sequences.map(sequence => {
+        const block = sequence.blocks[0];
+        const row = sequence.slotToolRow || block.slotToolRow || parseSlotToolRow(block);
+        return [
+          mzCell(`${row.rowMode} ${row.sequenceNumber}`, "row-no"), mzCell(row.toolName, "op", `Tool No. ${row.toolNumber ?? ""}`),
+          mzCell(row.nominalDiameter), mzCell(row.toolFlag), mzCell(row.priority, row.priorityIsLate ? "magenta" : "priority", "Execution priority"),
+          mzCell(row.approachX, "yellow"), mzCell(row.approachY, "yellow"), mzCell(row.processType), mzCell(row.zfd, "green left"),
+          mzCell(row.secondaryType), mzCell(row.peckDepth, "diamond"), mzCell(row.depthZ, row.depthZ === "♦" ? "diamond" : ""),
+          mzCell(row.widthR, "diamond"), mzCell(row.cuttingSpeed), mzCell(row.feedRate), ...row.mCodes.map(code => mzCell(code))
+        ];
+      });
+      return renderMzTable(headers, rows, "tool-head");
+    }
+
+    function renderSlotGeometry(unit) {
+      const sequences = unit.sequences.filter(sequence => sequence.contextCommand === "G420");
+      if (!sequences.length) return "";
+      const headers = ["FIG", "PTN", "X", "Y", "R/th", "I", "J", "P", "CNR", "R-FEED", "RGH"].map(label => ({ label }));
+      const rows = sequences.map(sequence => {
+        const block = sequence.blocks[0];
+        const row = sequence.slotGeometryRow || block.slotGeometryRow || parseSlotGeometryRow(block);
+        return [
+          mzCell(row.sequenceNumber, "row-no"), mzCell(row.pattern, "op"), mzCell(row.x), mzCell(row.y),
+          mzCell(row.radiusThickness), mzCell(row.i), mzCell(row.j), mzCell(row.p), mzCell(row.cornerRadius),
+          mzCell(row.radiusFeed, "diamond"), mzCell(row.rough)
+        ];
+      });
+      return renderMzTable(headers, rows, "fig-head");
+    }
+
+    function renderSlotUnit(unit) {
+      const cycle = blockFor(unit, "G377") || unit.blocks[0];
+      const header = unit.slotHeader || cycle?.slotHeader || parseSlotHeader(cycle);
+      const headers = ["Unit No.", "UNIT", "", "DEPTH", "SRV-Z", "SLOT-WID", "BTM", "WAL", "FIN-Z", "FIN-R", "", ""].map(label => ({ label }));
+      const row = [
+        mzCell(unit.number, "row-no"), mzCell(header.unitName, "op"), mzCell(""), mzCell(header.depth),
+        mzCell(header.serviceZ), mzCell(header.slotWidth), mzCell(header.bottom), mzCell(header.wall),
+        mzCell(header.finishZ), mzCell(header.finishRadius), mzCell(""), mzCell("")
+      ];
+      return `<section class="mz-unit">${renderMzTable(headers, [row], "unit-head")}${renderSlotTools(unit)}${renderSlotGeometry(unit)}</section>`;
+    }
+
     function renderSubProgramUnit(unit) {
       const block = blockFor(unit, "G303") || unit.blocks[0];
       const header = unit.subProgramHeader || block?.subProgramHeader || parseSubProgramHeader(block);
@@ -2243,6 +2379,7 @@
       if (blockFor(unit, "G353")) return "reaming";
       if (blockFor(unit, "G354")) return "tapping";
       if (blockFor(unit, "G362")) return "lineCenter";
+      if (blockFor(unit, "G377")) return "slot";
       if (blockFor(unit, "G356")) return "circleMill";
       if (blockFor(unit, "G369")) return "chamferOut";
       if (blockFor(unit, "G357")) return "drillTap";
@@ -2261,6 +2398,7 @@
         reaming: renderReamingUnit,
         tapping: renderTappingUnit,
         lineCenter: renderLineCenterUnit,
+        slot: renderSlotUnit,
         circleMill: renderCircleMillUnit,
         chamferOut: renderChamferOutUnit,
         drillTap: renderDrillTapUnit,
