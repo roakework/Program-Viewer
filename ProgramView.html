@@ -190,8 +190,12 @@
     .view-tab { flex: 0 0 auto; min-width: 180px; color: var(--cyan); background: #071013; border-color: var(--line); border-bottom: 0; }
     .view-tab.active { color: #001013; background: var(--cyan); border-color: var(--cyan); }
     .program-file-tabs { display: flex; gap: 5px; margin: 14px 0 0; padding: 0 8px; overflow-x: auto; border-bottom: 2px solid #4f81e1; background: #03090b; }
-    .program-file-tab { flex: 0 0 auto; min-width: 150px; max-width: 280px; padding: 8px 12px; overflow: hidden; color: #9bc4ff; background: #0b181c; border-color: #375c65; border-bottom: 0; text-overflow: ellipsis; white-space: nowrap; cursor: grab; }
+    .program-file-tab { display: flex; flex: 0 0 auto; min-width: 150px; max-width: 300px; overflow: hidden; color: #9bc4ff; background: #0b181c; border: 1px solid #375c65; border-bottom: 0; white-space: nowrap; cursor: grab; }
     .program-file-tab.active { color: #001013; background: linear-gradient(#68a5ff, #3f73dc); border-color: #68a5ff; }
+    .program-tab-select { min-width: 0; flex: 1 1 auto; padding: 8px 10px 8px 12px; overflow: hidden; color: inherit; background: transparent; border: 0; text-overflow: ellipsis; white-space: nowrap; cursor: inherit; }
+    .program-tab-close { flex: 0 0 32px; width: 32px; padding: 0; color: #9bc4ff; background: transparent; border: 0; border-left: 1px solid #375c65; font: 700 18px/1 monospace; cursor: pointer; }
+    .program-file-tab.active .program-tab-close { color: #001013; border-left-color: rgba(0, 16, 19, .35); }
+    .program-tab-close:hover, .program-tab-close:focus-visible { color: #fff; background: #b40020; outline: none; }
     .program-file-tab.dragging { opacity: .35; cursor: grabbing; }
     .program-file-tab.drag-before { box-shadow: inset 4px 0 0 var(--yellow); }
     .program-file-tab.drag-after { box-shadow: inset -4px 0 0 var(--yellow); }
@@ -200,6 +204,16 @@
     .excel-export-button { flex: 0 0 auto; padding: 6px 12px; color: #001013; background: var(--yellow); border-color: var(--yellow); font-size: .78rem; letter-spacing: .03em; }
     .excel-export-button:disabled { cursor: not-allowed; filter: grayscale(1); opacity: .45; }
     .tool-summary-wrap { overflow-x: auto; background: #000018; }
+    .unit-preview-button { padding: 2px 7px; color: var(--cyan); background: #071013; border: 1px solid var(--cyan); font: inherit; white-space: nowrap; cursor: pointer; }
+    .unit-preview-button:hover, .unit-preview-button:focus-visible { color: #001013; background: var(--cyan); outline: none; }
+    .unit-preview-overlay { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 24px; background: rgba(0, 0, 18, .86); }
+    .unit-preview-dialog { width: min(1400px, 96vw); max-height: 90vh; overflow: hidden; background: #000018; border: 2px solid var(--cyan); box-shadow: 0 0 30px rgba(0, 255, 255, .3); }
+    .unit-preview-titlebar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 8px 10px 8px 14px; color: #001013; background: linear-gradient(#68a5ff, #3f73dc); }
+    .unit-preview-title { min-width: 0; overflow: hidden; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+    .unit-preview-close { flex: 0 0 auto; width: 34px; height: 30px; padding: 0; color: #fff; background: #8d0019; border-color: #ff6682; font: 700 20px/1 monospace; cursor: pointer; }
+    .unit-preview-body { max-height: calc(90vh - 48px); overflow: auto; padding: 12px; background: #000018; }
+    .unit-preview-body .mz-unit { margin: 0; }
+    body.unit-preview-open { overflow: hidden; }
     .tool-summary-table { width: 100%; min-width: 820px; border-collapse: collapse; background: #000; }
     .tool-summary-table th { padding: 8px 10px; border: 1px solid #4e535b; color: #000; background: linear-gradient(#68a5ff, #3f73dc); font-weight: 400; white-space: nowrap; }
     .tool-summary-table td { padding: 8px 10px; border: 1px solid #4e535b; color: #fff; text-align: center; vertical-align: top; }
@@ -263,7 +277,7 @@
         </div>
       </aside>
 
-      <nav class="program-file-tabs" id="programFileTabs" aria-label="Uploaded PAM programs" hidden></nav>
+      <nav class="program-file-tabs" id="programFileTabs" aria-label="Uploaded PAM and PBM programs" hidden></nav>
 
       <section class="panel" aria-live="polite">
         <div class="panel-title">CONVERSATIONAL PROGRAM GRID</div>
@@ -284,6 +298,16 @@
       </div>
       <div class="tool-summary-wrap" id="toolSummary"></div>
     </section>
+
+    <div class="unit-preview-overlay" id="unitPreviewOverlay" role="dialog" aria-modal="true" aria-labelledby="unitPreviewTitle" hidden>
+      <section class="unit-preview-dialog">
+        <header class="unit-preview-titlebar">
+          <div class="unit-preview-title" id="unitPreviewTitle">UNIT PREVIEW</div>
+          <button class="unit-preview-close" id="unitPreviewClose" type="button" aria-label="Close unit preview">×</button>
+        </header>
+        <div class="unit-preview-body mz-screen" id="unitPreviewBody"></div>
+      </section>
+    </div>
   </main>
 
   <script>
@@ -1833,7 +1857,12 @@
     const toolsTabButton = document.getElementById("toolsTabButton");
     const toolSummary = document.getElementById("toolSummary");
     const exportToolUsageButton = document.getElementById("exportToolUsageButton");
+    const unitPreviewOverlay = document.getElementById("unitPreviewOverlay");
+    const unitPreviewTitle = document.getElementById("unitPreviewTitle");
+    const unitPreviewBody = document.getElementById("unitPreviewBody");
+    const unitPreviewClose = document.getElementById("unitPreviewClose");
     let currentToolSummary = [];
+    let unitPreviewReturnFocus = null;
 
     const escapeHtml = value => String(value ?? "").replace(/[&<>'"]/g, char => ({
       "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;"
@@ -1911,6 +1940,7 @@
       const summaryByTool = new Map();
       const sourceFileName = program.sourceFileName || "PAM PROGRAM";
       const programNumber = program.header.programNumber || "UNKNOWN";
+      const programId = program.documentId || `${sourceFileName}|${programNumber}`;
       const addCallout = (unit, tool, sequenceLabel, calloutIndex, unitLocations) => {
         if (!tool || (!tool.toolName && tool.toolNumber == null)) return;
         const location = unitLocations[calloutIndex] || unitLocations[0] ||
@@ -1942,6 +1972,7 @@
           entry.unitReferences.push({ key: unitKey, fileName: sourceFileName, programNumber, unitNumber: unit.number });
         }
         entry.callouts.push({
+          programId,
           sourceFileName,
           programNumber,
           unitNumber: unit.number,
@@ -2043,7 +2074,7 @@
         const calloutRows = entry.callouts.map(callout => `<tr>
           <td>${escapeHtml(callout.sourceFileName)}</td>
           <td>${escapeHtml(callout.programNumber)}</td>
-          <td class="summary-unit">Unit ${escapeHtml(callout.unitNumber)}</td>
+          <td class="summary-unit"><button class="unit-preview-button" type="button" data-program-id="${escapeHtml(callout.programId)}" data-unit-number="${escapeHtml(callout.unitNumber)}" title="Preview Unit ${escapeHtml(callout.unitNumber)}">Unit ${escapeHtml(callout.unitNumber)}</button></td>
           <td class="summary-tool">${escapeHtml(toolCallout)}</td>
           <td>${escapeHtml(callout.nominalDiameter || "—")}</td>
           <td class="summary-unit">${escapeHtml(callout.letterCallout || "—")}</td>
@@ -2119,6 +2150,18 @@
     }
 
     exportToolUsageButton.addEventListener("click", exportToolUsageToExcel);
+    toolSummary.addEventListener("click", event => {
+      const button = event.target.closest(".unit-preview-button");
+      if (!button) return;
+      openUnitPreview(button.dataset.programId, button.dataset.unitNumber, button);
+    });
+    unitPreviewClose.addEventListener("click", closeUnitPreview);
+    unitPreviewOverlay.addEventListener("click", event => {
+      if (event.target === unitPreviewOverlay) closeUnitPreview();
+    });
+    document.addEventListener("keydown", event => {
+      if (event.key === "Escape" && !unitPreviewOverlay.hidden) closeUnitPreview();
+    });
     window.exportToolUsageToExcel = exportToolUsageToExcel;
 
     window.buildToolSummary = buildToolSummary;
@@ -2654,7 +2697,7 @@
       return "generic";
     }
 
-    function renderProgramMarkup(program) {
+    function renderUnitMarkup(unit) {
       const unitRenderers = {
         endProgram: renderEndProgramUnit,
         subProgram: renderSubProgramUnit,
@@ -2672,11 +2715,13 @@
         drillTap: renderDrillTapUnit,
         generic: renderGenericUnit
       };
-      const tables = program.units.map(unit => {
-        const type = classifyUnit(unit);
-        const rendered = unitRenderers[type](unit);
-        return type === "generic" ? rendered : rendered.replace("</section>", `${renderPreservedUnit(unit)}</section>`);
-      }).join("");
+      const type = classifyUnit(unit);
+      const rendered = unitRenderers[type](unit);
+      return type === "generic" ? rendered : rendered.replace("</section>", `${renderPreservedUnit(unit)}</section>`);
+    }
+
+    function renderProgramMarkup(program) {
+      const tables = program.units.map(renderUnitMarkup).join("");
       const order = program.executionOrder.filter(item => item.sequence && item.command.startsWith("N"));
       const formatLabel = program.convertedFromPbm ? " · PBM → PAM VIEW" : "";
       return `<div class="program-banner">
@@ -2689,6 +2734,30 @@
 
     function renderDisplay(program) {
       viewer.innerHTML = renderProgramMarkup(program);
+    }
+
+    function openUnitPreview(programId, unitNumber, trigger = null) {
+      const program = currentPrograms.find(item => String(item.documentId || `${item.sourceFileName}|${item.header.programNumber}`) === String(programId));
+      const unit = program?.units.find(item => String(item.number) === String(unitNumber));
+      if (!program || !unit) {
+        error.textContent = `Unit ${unitNumber} is no longer available.`;
+        return;
+      }
+      unitPreviewReturnFocus = trigger;
+      unitPreviewTitle.textContent = `${program.sourceFileName || "PAM PROGRAM"} · PROGRAM ${program.header.programNumber || "UNKNOWN"} · UNIT ${unit.number}`;
+      unitPreviewBody.innerHTML = renderUnitMarkup(unit);
+      unitPreviewOverlay.hidden = false;
+      document.body.classList.add("unit-preview-open");
+      unitPreviewClose.focus();
+    }
+
+    function closeUnitPreview() {
+      if (unitPreviewOverlay.hidden) return;
+      unitPreviewOverlay.hidden = true;
+      unitPreviewBody.innerHTML = "";
+      document.body.classList.remove("unit-preview-open");
+      unitPreviewReturnFocus?.focus?.();
+      unitPreviewReturnFocus = null;
     }
 
     let currentPrograms = [];
@@ -2711,7 +2780,10 @@
       const selectedIndex = Math.max(0, currentPrograms.indexOf(selectedProgram));
       programFileTabs.innerHTML = currentPrograms.map((program, index) => {
         const label = `${program.sourceFileName || `PAM ${index + 1}`} · ${program.header.programNumber || "UNKNOWN"}`;
-        return `<button class="program-file-tab${index === selectedIndex ? " active" : ""}" type="button" draggable="true" data-program-index="${index}" aria-selected="${index === selectedIndex}" title="${escapeHtml(label)} · Drag to reorder">${escapeHtml(label)}</button>`;
+        return `<div class="program-file-tab${index === selectedIndex ? " active" : ""}" draggable="true" data-program-index="${index}" aria-selected="${index === selectedIndex}" title="${escapeHtml(label)} · Drag to reorder">
+          <button class="program-tab-select" type="button" title="Open ${escapeHtml(label)}">${escapeHtml(label)}</button>
+          <button class="program-tab-close" type="button" draggable="false" aria-label="Close ${escapeHtml(label)}" title="Remove this program">×</button>
+        </div>`;
       }).join("");
       programFileTabs.hidden = currentPrograms.length === 0;
       selectProgram(selectedIndex);
@@ -2731,17 +2803,57 @@
       return currentPrograms.indexOf(movedProgram);
     }
 
+    function closeProgramTab(index) {
+      const removedProgram = currentPrograms[index];
+      if (!removedProgram) return;
+      const selectedProgram = currentPrograms[activeProgramIndex];
+      currentPrograms.splice(index, 1);
+      const documentIndex = loadedDocuments.findIndex(document => document.id === removedProgram.documentId);
+      if (documentIndex >= 0) loadedDocuments.splice(documentIndex, 1);
+      syncSourceText();
+
+      if (!currentPrograms.length) {
+        activeProgramIndex = 0;
+        programFileTabs.innerHTML = "";
+        programFileTabs.hidden = true;
+        viewer.innerHTML = '<div class="empty">UPLOAD A .PAM OR .PBM FILE TO BEGIN</div>';
+        renderToolSummary([]);
+        viewTabs.hidden = true;
+        activateView("program");
+        jsonOutput.textContent = "{}";
+        status.textContent = "READY";
+        return;
+      }
+
+      const nextSelected = selectedProgram === removedProgram
+        ? currentPrograms[Math.min(index, currentPrograms.length - 1)]
+        : selectedProgram;
+      renderProgramTabs(nextSelected);
+      updateCombinedProgramState(currentPrograms);
+    }
+
     function clearProgramDropIndicators() {
       programFileTabs.querySelectorAll(".program-file-tab").forEach(button => button.classList.remove("drag-before", "drag-after", "dragging"));
     }
 
     programFileTabs.addEventListener("click", event => {
+      const closeButton = event.target.closest(".program-tab-close");
+      if (closeButton) {
+        event.stopPropagation();
+        const tab = closeButton.closest(".program-file-tab");
+        closeProgramTab(Number(tab.dataset.programIndex));
+        return;
+      }
       const button = event.target.closest(".program-file-tab");
       if (!button) return;
       selectProgram(Number(button.dataset.programIndex));
     });
 
     programFileTabs.addEventListener("dragstart", event => {
+      if (event.target.closest(".program-tab-close")) {
+        event.preventDefault();
+        return;
+      }
       const button = event.target.closest(".program-file-tab");
       if (!button) return;
       draggedProgramIndex = Number(button.dataset.programIndex);
@@ -2783,6 +2895,7 @@
     });
 
     programFileTabs.addEventListener("keydown", event => {
+      if (event.target.closest(".program-tab-close")) return;
       if (!event.altKey || !["ArrowLeft", "ArrowRight"].includes(event.key)) return;
       const button = event.target.closest(".program-file-tab");
       if (!button) return;
@@ -2791,14 +2904,40 @@
       if (toIndex < 0 || toIndex >= currentPrograms.length) return;
       event.preventDefault();
       const movedIndex = moveProgramTab(fromIndex, toIndex);
-      programFileTabs.querySelector(`[data-program-index="${movedIndex}"]`)?.focus();
+      programFileTabs.querySelector(`[data-program-index="${movedIndex}"] .program-tab-select`)?.focus();
     });
 
     window.renderDisplay = renderDisplay;
     window.selectProgram = selectProgram;
     window.moveProgramTab = moveProgramTab;
+    window.closeProgramTab = closeProgramTab;
 
     let loadedDocuments = [];
+    let nextDocumentId = 1;
+
+    function syncSourceText() {
+      source.value = loadedDocuments.map(document => {
+        const note = document.convertedFromPbm ? " · VIEWER-CONVERTED PBM → PAM" : "";
+        return `===== ${document.name}${note} =====\n${document.text}`;
+      }).join("\n\n");
+    }
+
+    function updateCombinedProgramState(programs) {
+      const combinedToolSummary = combineToolSummaries(programs.map(program => program.toolSummary));
+      renderToolSummary(combinedToolSummary);
+      const totals = programs.reduce((sum, program) => ({
+        units: sum.units + program.metadata.unitCount,
+        sequences: sum.sequences + program.metadata.sequenceCount
+      }), { units: 0, sequences: 0 });
+      jsonOutput.textContent = JSON.stringify({
+        metadata: { programCount: programs.length, unitCount: totals.units, sequenceCount: totals.sequences },
+        programs,
+        toolSummary: combinedToolSummary
+      }, null, 2);
+      const convertedCount = programs.filter(program => program.convertedFromPbm).length;
+      const convertedStatus = convertedCount ? ` · ${convertedCount} PBM CONVERTED` : "";
+      status.textContent = `${programs.length} PROGRAM${programs.length === 1 ? "" : "S"} · ${totals.units} UNITS · ${totals.sequences} SEQUENCES${convertedStatus}`;
+    }
 
     function runParser(documents = loadedDocuments) {
       error.textContent = "";
@@ -2812,28 +2951,16 @@
         const programs = documentsToParse.map(document => {
           const program = parseMazatrol(document.text);
           program.sourceFileName = document.name;
+          program.documentId = document.id;
           program.sourceFormat = document.sourceFormat || "PAM";
           program.convertedFromPbm = Boolean(document.convertedFromPbm);
           program.toolSummary = buildToolSummary(program);
           return program;
         });
-        const combinedToolSummary = combineToolSummaries(programs.map(program => program.toolSummary));
         renderPrograms(programs);
-        renderToolSummary(combinedToolSummary);
+        updateCombinedProgramState(programs);
         viewTabs.hidden = false;
         activateView("program");
-        const totals = programs.reduce((sum, program) => ({
-          units: sum.units + program.metadata.unitCount,
-          sequences: sum.sequences + program.metadata.sequenceCount
-        }), { units: 0, sequences: 0 });
-        jsonOutput.textContent = JSON.stringify({
-          metadata: { programCount: programs.length, unitCount: totals.units, sequenceCount: totals.sequences },
-          programs,
-          toolSummary: combinedToolSummary
-        }, null, 2);
-        const convertedCount = programs.filter(program => program.convertedFromPbm).length;
-        const convertedStatus = convertedCount ? ` · ${convertedCount} PBM CONVERTED` : "";
-        status.textContent = `${programs.length} PROGRAM${programs.length === 1 ? "" : "S"} · ${totals.units} UNITS · ${totals.sequences} SEQUENCES${convertedStatus}`;
       } catch (problem) {
         error.textContent = `Parser error: ${problem.message}`;
         status.textContent = "ERROR";
@@ -2872,11 +2999,11 @@
       error.textContent = "";
       status.textContent = `LOADING ${files.length} PROGRAM${files.length === 1 ? "" : "S"}`;
       try {
-        loadedDocuments = await Promise.all(files.map(readProgramFile));
-        source.value = loadedDocuments.map(document => {
-          const note = document.convertedFromPbm ? " · VIEWER-CONVERTED PBM → PAM" : "";
-          return `===== ${document.name}${note} =====\n${document.text}`;
-        }).join("\n\n");
+        loadedDocuments = (await Promise.all(files.map(readProgramFile))).map(document => ({
+          ...document,
+          id: `program-${nextDocumentId++}`
+        }));
+        syncSourceText();
         runParser(loadedDocuments);
         fileInput.value = "";
       } catch (problem) {
