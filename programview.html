@@ -360,6 +360,7 @@
         G305: "Manual Unit",
         G350: "Drilling",
         G353: "Reaming",
+        G354: "Tapping",
         G356: "Circle Mill",
         G369: "Chamfer Out",
         G380: "Offset",
@@ -432,6 +433,10 @@
           commands: ["G353"],
           fields: {}
         },
+        tapping: {
+          commands: ["G354"],
+          fields: {}
+        },
         circleMill: {
           commands: ["G356"],
           fields: {}
@@ -471,9 +476,11 @@
         MA: "M/B"
       },
       toolCallouts: {
+        1: "CTR-DR",
         14: "FCE MILL",
         2: "DRILL",
         3: "REAMER",
+        4: "TAP",
         5: "TAP",
         13: "CHAMFER",
         15: "END MILL"
@@ -912,6 +919,73 @@
       };
     }
 
+    // G354 Tapping rules. Isolated so existing Unit types remain unchanged.
+    function tappingValue(block, key, occurrence = 0) {
+      const parameter = manualParameter(block, key, occurrence);
+      return parameter ? contextualValue(parameter).replace(/^&/, "") : "";
+    }
+
+    function parseTappingHeader(block) {
+      const metric = manualParameter(block, "A")?.value === 1;
+      const nominal = tappingValue(block, "D", 0);
+      return {
+        unitName: "TAPPING",
+        nominalDiameter: `${metric ? "M" : ""}${nominal}`,
+        majorDiameter: tappingValue(block, "E", 0),
+        pitch: tappingValue(block, "P", 0),
+        tapDepth: tappingValue(block, "H", 0),
+        chamfer: tappingValue(block, "C", 0),
+        chip: tappingValue(block, "K", 0),
+        raw: block.raw
+      };
+    }
+
+    function parseTappingToolRow(block) {
+      const toolNumber = manualParameter(block, "T")?.value ?? null;
+      const sCode = manualParameter(block, "S")?.value ?? null;
+      const priorityInfo = parsedPriority(block);
+      const isCenterDrill = toolNumber === 1;
+      const isTap = toolNumber === 4;
+      const flagByS = { 2: "B", 6: "F" };
+      const nominal = tappingValue(block, "D", 0);
+      return {
+        sequenceNumber: Number(block.command.slice(1)),
+        toolNumber,
+        toolName: block.comments[0] || CONTEXTUAL_MAPPING_DICTIONARY.toolCallouts[toolNumber] || (isTap ? "TAP" : "DRILL"),
+        nominalDiameter: isTap ? `M${nominal}` : nominal,
+        toolFlag: flagByS[sCode] || "",
+        priority: priorityInfo.rawValue || "",
+        priorityIsLate: priorityInfo.isLate,
+        holeDiameter: tappingValue(block, "E", 0),
+        holeDepth: isCenterDrill ? "♦" : tappingValue(block, "H", 0),
+        preDiameter: isCenterDrill ? "♦" : (isTap ? "TAP" : tappingValue(block, "E", 1)),
+        preDepth: isCenterDrill || isTap ? "♦" : tappingValue(block, "H", 1),
+        rough: isCenterDrill ? "90°" : (isTap ? "FIX" : "PCK2"),
+        depthAddress: isCenterDrill ? "" : (isTap ? "P" : "T"),
+        depth: isCenterDrill ? "CTR-D" : (isTap ? tappingValue(block, "Z", 0).replace(/^0(?=\.)/, "") : tappingValue(block, "Z", 0)),
+        peckDepth: "♦",
+        cuttingSpeed: tappingValue(block, "I", 0),
+        feedRate: tappingValue(block, "J", 0),
+        mCodes: [tappingValue(block, "MA"), tappingValue(block, "MB"), tappingValue(block, "MC")],
+        raw: block.raw
+      };
+    }
+
+    function parseTappingGeometryRow(block) {
+      return {
+        sequenceNumber: Number(block.command.slice(1)),
+        pattern: manualParameter(block, "A")?.value === 1 ? "PT" : "",
+        z: tappingValue(block, "Z", 0),
+        x: tappingValue(block, "X", 0),
+        y: tappingValue(block, "Y", 0),
+        indicators: ["♦", "♦", "♦", "♦", "♦", "♦", "♦"],
+        p: tappingValue(block, "P", 0),
+        q: tappingValue(block, "Q", 0),
+        r: tappingValue(block, "R", 0),
+        raw: block.raw
+      };
+    }
+
     // G303 Sub Program rules. Isolated so existing Unit types remain unchanged.
     function parseSubProgramHeader(block) {
       const repeatParameter = manualParameter(block, "F");
@@ -1066,6 +1140,15 @@
       if (unitType === "reaming" && /^N\d+$/i.test(block.command) && context.sectionCommand === "G420") {
         block.reamingGeometryRow = parseReamingGeometryRow(block);
       }
+      if (unitType === "tapping" && block.command === "G354") {
+        block.tappingHeader = parseTappingHeader(block);
+      }
+      if (unitType === "tapping" && /^N\d+$/i.test(block.command) && context.sectionCommand === "G424") {
+        block.tappingToolRow = parseTappingToolRow(block);
+      }
+      if (unitType === "tapping" && /^N\d+$/i.test(block.command) && context.sectionCommand === "G420") {
+        block.tappingGeometryRow = parseTappingGeometryRow(block);
+      }
       if (unitType === "subProgram" && block.command === "G303") {
         block.subProgramHeader = parseSubProgramHeader(block);
       }
@@ -1126,6 +1209,7 @@
               circleMillHeader: block.circleMillHeader || null,
               drillingHeader: block.drillingHeader || null,
               reamingHeader: block.reamingHeader || null,
+              tappingHeader: block.tappingHeader || null,
               subProgramHeader: block.subProgramHeader || null,
               chamferOutHeader: block.chamferOutHeader || null,
               endProgramHeader: block.endProgramHeader || null,
@@ -1146,6 +1230,7 @@
           if (block.circleMillHeader) currentUnit.circleMillHeader = block.circleMillHeader;
           if (block.drillingHeader) currentUnit.drillingHeader = block.drillingHeader;
           if (block.reamingHeader) currentUnit.reamingHeader = block.reamingHeader;
+          if (block.tappingHeader) currentUnit.tappingHeader = block.tappingHeader;
           if (block.subProgramHeader) currentUnit.subProgramHeader = block.subProgramHeader;
           if (block.chamferOutHeader) currentUnit.chamferOutHeader = block.chamferOutHeader;
           if (block.endProgramHeader) currentUnit.endProgramHeader = block.endProgramHeader;
@@ -1174,6 +1259,8 @@
             drillingGeometryRow: block.drillingGeometryRow || null,
             reamingToolRow: block.reamingToolRow || null,
             reamingGeometryRow: block.reamingGeometryRow || null,
+            tappingToolRow: block.tappingToolRow || null,
+            tappingGeometryRow: block.tappingGeometryRow || null,
             chamferOutToolRow: block.chamferOutToolRow || null,
             chamferOutGeometryRow: block.chamferOutGeometryRow || null,
             priority: block.priority,
@@ -1279,6 +1366,9 @@
     window.parseReamingHeader = parseReamingHeader;
     window.parseReamingToolRow = parseReamingToolRow;
     window.parseReamingGeometryRow = parseReamingGeometryRow;
+    window.parseTappingHeader = parseTappingHeader;
+    window.parseTappingToolRow = parseTappingToolRow;
+    window.parseTappingGeometryRow = parseTappingGeometryRow;
     window.parseSubProgramHeader = parseSubProgramHeader;
     window.parseEndProgramHeader = parseEndProgramHeader;
     window.parseChamferOutHeader = parseChamferOutHeader;
@@ -1342,7 +1432,8 @@
         const pointRow = sequence.drillTapGeometryRow || block.drillTapGeometryRow ||
           sequence.circleMillGeometryRow || block.circleMillGeometryRow ||
           sequence.drillingGeometryRow || block.drillingGeometryRow ||
-          sequence.reamingGeometryRow || block.reamingGeometryRow;
+          sequence.reamingGeometryRow || block.reamingGeometryRow ||
+          sequence.tappingGeometryRow || block.tappingGeometryRow;
         const manualRow = sequence.manualRow || block.manualRow;
 
         if (faceRow || chamferRow) {
@@ -1437,6 +1528,7 @@
             sequence.circleMillToolRow || block.circleMillToolRow ||
             sequence.drillingToolRow || block.drillingToolRow ||
             sequence.reamingToolRow || block.reamingToolRow ||
+            sequence.tappingToolRow || block.tappingToolRow ||
             sequence.chamferOutToolRow || block.chamferOutToolRow;
           if (row) {
             addCallout(unit, row, sequence.id, calloutIndex, unitLocations);
@@ -1839,6 +1931,49 @@
       return `<section class="mz-unit">${renderMzTable(headers, [row], "unit-head")}${renderReamingTools(unit)}${renderReamingGeometry(unit)}</section>`;
     }
 
+    function renderTappingTools(unit) {
+      const sequences = unit.sequences.filter(sequence => sequence.contextCommand === "G424");
+      if (!sequences.length) return "";
+      const headers = ["SNo.", "TOOL", "NOM-Ø", "", "No.", "HOLE-Ø", "HOLE-DEP", "PRE-DIA", "PRE-DEP", "RGH", "DEPTH", "PK-DEP", "C-SP", "FR", "M", "M", "M"].map(label => ({ label }));
+      const rows = sequences.map(sequence => {
+        const block = sequence.blocks[0];
+        const row = sequence.tappingToolRow || block.tappingToolRow || parseTappingToolRow(block);
+        const depthDisplay = row.depthAddress ? `${row.depthAddress} ${row.depth}` : row.depth;
+        return [
+          mzCell(row.sequenceNumber, "row-no"), mzCell(row.toolName, "op", `Tool No. ${row.toolNumber ?? ""}`),
+          mzCell(row.nominalDiameter), mzCell(row.toolFlag, "green"), mzCell(row.priority, row.priorityIsLate ? "magenta" : "priority", "Execution priority"),
+          mzCell(row.holeDiameter), mzCell(row.holeDepth, row.holeDepth === "♦" ? "diamond" : ""),
+          mzCell(row.preDiameter, row.preDiameter === "♦" ? "diamond" : ""), mzCell(row.preDepth, row.preDepth === "♦" ? "diamond" : ""),
+          mzCell(row.rough, row.rough === "PCK2" ? "magenta" : "op"), mzCell(depthDisplay, row.depthAddress ? "green left" : "left"), mzCell(row.peckDepth, "diamond"),
+          mzCell(row.cuttingSpeed), mzCell(row.feedRate), ...row.mCodes.map(code => mzCell(code))
+        ];
+      });
+      return renderMzTable(headers, rows, "tool-head");
+    }
+
+    function renderTappingGeometry(unit) {
+      const sequences = unit.sequences.filter(sequence => sequence.contextCommand === "G420");
+      if (!sequences.length) return "";
+      const headers = ["FIG", "PTN", "Z", "X", "Y", "AN1", "AN2", "T1", "T2", "F", "M", "N", "P", "Q", "R"].map(label => ({ label }));
+      const rows = sequences.map(sequence => {
+        const block = sequence.blocks[0];
+        const row = sequence.tappingGeometryRow || block.tappingGeometryRow || parseTappingGeometryRow(block);
+        return [mzCell(row.sequenceNumber, "row-no"), mzCell(row.pattern, "op"), mzCell(row.z), mzCell(row.x), mzCell(row.y), ...row.indicators.map(value => mzCell(value, "diamond")), mzCell(row.p), mzCell(row.q), mzCell(row.r)];
+      });
+      return renderMzTable(headers, rows, "fig-head");
+    }
+
+    function renderTappingUnit(unit) {
+      const cycle = blockFor(unit, "G354") || unit.blocks[0];
+      const header = unit.tappingHeader || cycle?.tappingHeader || parseTappingHeader(cycle);
+      const headers = ["Unit No.", "UNIT", "", "NOM-Ø", "MAJOR-Ø", "PITCH", "TAP-DEP", "CHMF", "CHP"].map(label => ({ label }));
+      const row = [
+        mzCell(unit.number, "row-no"), mzCell(header.unitName, "op"), mzCell(""), mzCell(header.nominalDiameter, "op"),
+        mzCell(header.majorDiameter), mzCell(header.pitch), mzCell(header.tapDepth), mzCell(header.chamfer), mzCell(header.chip)
+      ];
+      return `<section class="mz-unit">${renderMzTable(headers, [row], "unit-head")}${renderTappingTools(unit)}${renderTappingGeometry(unit)}</section>`;
+    }
+
     function renderSubProgramUnit(unit) {
       const block = blockFor(unit, "G303") || unit.blocks[0];
       const header = unit.subProgramHeader || block?.subProgramHeader || parseSubProgramHeader(block);
@@ -1973,6 +2108,7 @@
       if (blockFor(unit, "G371")) return "faceMill";
       if (blockFor(unit, "G350")) return "drilling";
       if (blockFor(unit, "G353")) return "reaming";
+      if (blockFor(unit, "G354")) return "tapping";
       if (blockFor(unit, "G356")) return "circleMill";
       if (blockFor(unit, "G369")) return "chamferOut";
       if (blockFor(unit, "G357")) return "drillTap";
@@ -1989,6 +2125,7 @@
         faceMill: renderFaceMillUnit,
         drilling: renderDrillingUnit,
         reaming: renderReamingUnit,
+        tapping: renderTappingUnit,
         circleMill: renderCircleMillUnit,
         chamferOut: renderChamferOutUnit,
         drillTap: renderDrillTapUnit,
