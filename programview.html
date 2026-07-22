@@ -359,6 +359,7 @@
         G303: "Sub Program",
         G305: "Manual Unit",
         G350: "Drilling",
+        G353: "Reaming",
         G356: "Circle Mill",
         G369: "Chamfer Out",
         G380: "Offset",
@@ -427,6 +428,10 @@
           commands: ["G350"],
           fields: {}
         },
+        reaming: {
+          commands: ["G353"],
+          fields: {}
+        },
         circleMill: {
           commands: ["G356"],
           fields: {}
@@ -468,6 +473,7 @@
       toolCallouts: {
         14: "FCE MILL",
         2: "DRILL",
+        3: "REAMER",
         5: "TAP",
         13: "CHAMFER",
         15: "END MILL"
@@ -848,6 +854,64 @@
       };
     }
 
+    // G353 Reaming rules. Isolated so existing Unit types remain unchanged.
+    function reamingValue(block, key, occurrence = 0) {
+      const parameter = manualParameter(block, key, occurrence);
+      return parameter ? contextualValue(parameter).replace(/^&/, "") : "";
+    }
+
+    function parseReamingHeader(block) {
+      return {
+        unitName: "REAMING",
+        diameter: reamingValue(block, "D", 0),
+        depth: reamingValue(block, "H", 0),
+        chamfer: reamingValue(block, "C", 0),
+        preReam: manualParameter(block, "A")?.value === 1 ? "DRILL" : "",
+        chip: reamingValue(block, "K", 0),
+        raw: block.raw
+      };
+    }
+
+    function parseReamingToolRow(block) {
+      const toolNumber = manualParameter(block, "T")?.value ?? null;
+      const priorityInfo = parsedPriority(block);
+      return {
+        sequenceNumber: Number(block.command.slice(1)),
+        toolNumber,
+        toolName: block.comments[0] || CONTEXTUAL_MAPPING_DICTIONARY.toolCallouts[toolNumber] || "REAMER",
+        nominalDiameter: reamingValue(block, "D", 0),
+        toolFlag: "",
+        priority: priorityInfo.rawValue || "",
+        priorityIsLate: priorityInfo.isLate,
+        holeDiameter: reamingValue(block, "E", 0),
+        holeDepth: reamingValue(block, "H", 0),
+        preDiameter: "♦",
+        preDepth: "♦",
+        rough: "♦",
+        depth: "G01",
+        peckDepth: "♦",
+        cuttingSpeed: reamingValue(block, "I", 0),
+        feedRate: reamingValue(block, "J", 0),
+        mCodes: [reamingValue(block, "MA"), reamingValue(block, "MB"), reamingValue(block, "MC")],
+        raw: block.raw
+      };
+    }
+
+    function parseReamingGeometryRow(block) {
+      return {
+        sequenceNumber: Number(block.command.slice(1)),
+        pattern: manualParameter(block, "A")?.value === 1 ? "PT" : "",
+        z: reamingValue(block, "Z", 0),
+        x: reamingValue(block, "X", 0),
+        y: reamingValue(block, "Y", 0),
+        indicators: ["♦", "♦", "♦", "♦", "♦", "♦", "♦"],
+        p: reamingValue(block, "P", 0),
+        q: reamingValue(block, "Q", 0),
+        r: reamingValue(block, "R", 0),
+        raw: block.raw
+      };
+    }
+
     // G303 Sub Program rules. Isolated so existing Unit types remain unchanged.
     function parseSubProgramHeader(block) {
       const repeatParameter = manualParameter(block, "F");
@@ -993,6 +1057,15 @@
       if (unitType === "drilling" && /^N\d+$/i.test(block.command) && context.sectionCommand === "G420") {
         block.drillingGeometryRow = parseDrillingGeometryRow(block);
       }
+      if (unitType === "reaming" && block.command === "G353") {
+        block.reamingHeader = parseReamingHeader(block);
+      }
+      if (unitType === "reaming" && /^N\d+$/i.test(block.command) && context.sectionCommand === "G424") {
+        block.reamingToolRow = parseReamingToolRow(block);
+      }
+      if (unitType === "reaming" && /^N\d+$/i.test(block.command) && context.sectionCommand === "G420") {
+        block.reamingGeometryRow = parseReamingGeometryRow(block);
+      }
       if (unitType === "subProgram" && block.command === "G303") {
         block.subProgramHeader = parseSubProgramHeader(block);
       }
@@ -1052,6 +1125,7 @@
               drillTapHeader: block.drillTapHeader || null,
               circleMillHeader: block.circleMillHeader || null,
               drillingHeader: block.drillingHeader || null,
+              reamingHeader: block.reamingHeader || null,
               subProgramHeader: block.subProgramHeader || null,
               chamferOutHeader: block.chamferOutHeader || null,
               endProgramHeader: block.endProgramHeader || null,
@@ -1071,6 +1145,7 @@
           if (block.drillTapHeader) currentUnit.drillTapHeader = block.drillTapHeader;
           if (block.circleMillHeader) currentUnit.circleMillHeader = block.circleMillHeader;
           if (block.drillingHeader) currentUnit.drillingHeader = block.drillingHeader;
+          if (block.reamingHeader) currentUnit.reamingHeader = block.reamingHeader;
           if (block.subProgramHeader) currentUnit.subProgramHeader = block.subProgramHeader;
           if (block.chamferOutHeader) currentUnit.chamferOutHeader = block.chamferOutHeader;
           if (block.endProgramHeader) currentUnit.endProgramHeader = block.endProgramHeader;
@@ -1097,6 +1172,8 @@
             circleMillGeometryRow: block.circleMillGeometryRow || null,
             drillingToolRow: block.drillingToolRow || null,
             drillingGeometryRow: block.drillingGeometryRow || null,
+            reamingToolRow: block.reamingToolRow || null,
+            reamingGeometryRow: block.reamingGeometryRow || null,
             chamferOutToolRow: block.chamferOutToolRow || null,
             chamferOutGeometryRow: block.chamferOutGeometryRow || null,
             priority: block.priority,
@@ -1199,6 +1276,9 @@
     window.parseDrillingHeader = parseDrillingHeader;
     window.parseDrillingToolRow = parseDrillingToolRow;
     window.parseDrillingGeometryRow = parseDrillingGeometryRow;
+    window.parseReamingHeader = parseReamingHeader;
+    window.parseReamingToolRow = parseReamingToolRow;
+    window.parseReamingGeometryRow = parseReamingGeometryRow;
     window.parseSubProgramHeader = parseSubProgramHeader;
     window.parseEndProgramHeader = parseEndProgramHeader;
     window.parseChamferOutHeader = parseChamferOutHeader;
@@ -1261,7 +1341,8 @@
         const chamferRow = sequence.chamferOutGeometryRow || block.chamferOutGeometryRow;
         const pointRow = sequence.drillTapGeometryRow || block.drillTapGeometryRow ||
           sequence.circleMillGeometryRow || block.circleMillGeometryRow ||
-          sequence.drillingGeometryRow || block.drillingGeometryRow;
+          sequence.drillingGeometryRow || block.drillingGeometryRow ||
+          sequence.reamingGeometryRow || block.reamingGeometryRow;
         const manualRow = sequence.manualRow || block.manualRow;
 
         if (faceRow || chamferRow) {
@@ -1355,6 +1436,7 @@
             sequence.drillTapToolRow || block.drillTapToolRow ||
             sequence.circleMillToolRow || block.circleMillToolRow ||
             sequence.drillingToolRow || block.drillingToolRow ||
+            sequence.reamingToolRow || block.reamingToolRow ||
             sequence.chamferOutToolRow || block.chamferOutToolRow;
           if (row) {
             addCallout(unit, row, sequence.id, calloutIndex, unitLocations);
@@ -1716,6 +1798,47 @@
       return `<section class="mz-unit">${renderMzTable(headers, [row], "unit-head")}${renderDrillingTools(unit)}${renderDrillingGeometry(unit)}</section>`;
     }
 
+    function renderReamingTools(unit) {
+      const sequences = unit.sequences.filter(sequence => sequence.contextCommand === "G424");
+      if (!sequences.length) return "";
+      const headers = ["SNo.", "TOOL", "NOM-Ø", "", "No.", "HOLE-Ø", "HOLE-DEP", "PRE-DIA", "PRE-DEP", "RGH", "DEPTH", "PK-DEP", "C-SP", "FR", "M", "M", "M"].map(label => ({ label }));
+      const rows = sequences.map(sequence => {
+        const block = sequence.blocks[0];
+        const row = sequence.reamingToolRow || block.reamingToolRow || parseReamingToolRow(block);
+        return [
+          mzCell(row.sequenceNumber, "row-no"), mzCell(row.toolName, "op", `Tool No. ${row.toolNumber ?? ""}`),
+          mzCell(row.nominalDiameter), mzCell(row.toolFlag, "green"), mzCell(row.priority, row.priorityIsLate ? "magenta" : "priority", "Execution priority"),
+          mzCell(row.holeDiameter), mzCell(row.holeDepth), mzCell(row.preDiameter, "diamond"), mzCell(row.preDepth, "diamond"),
+          mzCell(row.rough, "diamond"), mzCell(row.depth, "green left"), mzCell(row.peckDepth, "diamond"),
+          mzCell(row.cuttingSpeed), mzCell(row.feedRate), ...row.mCodes.map(code => mzCell(code))
+        ];
+      });
+      return renderMzTable(headers, rows, "tool-head");
+    }
+
+    function renderReamingGeometry(unit) {
+      const sequences = unit.sequences.filter(sequence => sequence.contextCommand === "G420");
+      if (!sequences.length) return "";
+      const headers = ["FIG", "PTN", "Z", "X", "Y", "AN1", "AN2", "T1", "T2", "F", "M", "N", "P", "Q", "R"].map(label => ({ label }));
+      const rows = sequences.map(sequence => {
+        const block = sequence.blocks[0];
+        const row = sequence.reamingGeometryRow || block.reamingGeometryRow || parseReamingGeometryRow(block);
+        return [mzCell(row.sequenceNumber, "row-no"), mzCell(row.pattern, "op"), mzCell(row.z), mzCell(row.x), mzCell(row.y), ...row.indicators.map(value => mzCell(value, "diamond")), mzCell(row.p), mzCell(row.q), mzCell(row.r)];
+      });
+      return renderMzTable(headers, rows, "fig-head");
+    }
+
+    function renderReamingUnit(unit) {
+      const cycle = blockFor(unit, "G353") || unit.blocks[0];
+      const header = unit.reamingHeader || cycle?.reamingHeader || parseReamingHeader(cycle);
+      const headers = ["Unit No.", "UNIT", "", "DIA", "DEPTH", "CHMF", "PRE-REAM", "CHP"].map(label => ({ label }));
+      const row = [
+        mzCell(unit.number, "row-no"), mzCell(header.unitName, "op"), mzCell(""), mzCell(header.diameter),
+        mzCell(header.depth), mzCell(header.chamfer), mzCell(header.preReam, "op"), mzCell(header.chip)
+      ];
+      return `<section class="mz-unit">${renderMzTable(headers, [row], "unit-head")}${renderReamingTools(unit)}${renderReamingGeometry(unit)}</section>`;
+    }
+
     function renderSubProgramUnit(unit) {
       const block = blockFor(unit, "G303") || unit.blocks[0];
       const header = unit.subProgramHeader || block?.subProgramHeader || parseSubProgramHeader(block);
@@ -1849,6 +1972,7 @@
       if (blockFor(unit, "G380")) return "offset";
       if (blockFor(unit, "G371")) return "faceMill";
       if (blockFor(unit, "G350")) return "drilling";
+      if (blockFor(unit, "G353")) return "reaming";
       if (blockFor(unit, "G356")) return "circleMill";
       if (blockFor(unit, "G369")) return "chamferOut";
       if (blockFor(unit, "G357")) return "drillTap";
@@ -1864,6 +1988,7 @@
         offset: renderOffsetUnit,
         faceMill: renderFaceMillUnit,
         drilling: renderDrillingUnit,
+        reaming: renderReamingUnit,
         circleMill: renderCircleMillUnit,
         chamferOut: renderChamferOutUnit,
         drillTap: renderDrillTapUnit,
