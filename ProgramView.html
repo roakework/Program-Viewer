@@ -185,6 +185,10 @@
     .manual-unit .manual-address { width: 28px; min-width: 28px; padding-left: 3px; padding-right: 3px; }
     .manual-unit .manual-data-value { width: 105px; min-width: 88px; }
     .manual-unit .fig-head th { font-size: .9rem; }
+    .manual-cycle-time { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; padding: 7px 10px; color: #fff; background: #071013; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+    .manual-cycle-time .cycle-label { color: var(--cyan); }
+    .manual-cycle-time .cycle-value { color: var(--yellow); font-size: 1.05rem; }
+    .manual-cycle-time .cycle-detail { color: #9df0a6; font-size: .82rem; }
     [hidden] { display: none !important; }
     .view-tabs { display: flex; gap: 6px; margin-top: 14px; border-bottom: 2px solid var(--cyan); }
     .view-tab { flex: 0 0 auto; min-width: 180px; color: var(--cyan); background: #071013; border-color: var(--line); border-bottom: 0; }
@@ -2633,6 +2637,104 @@
       return `<section class="mz-unit">${renderMzTable(headers, [row], "unit-head")}${renderChamferOutTools(unit)}${renderChamferOutGeometry(unit)}</section>`;
     }
 
+    function formatManualCycleDuration(minutes) {
+      const totalSeconds = Math.max(0, Math.round(minutes * 60));
+      const hours = Math.floor(totalSeconds / 3600);
+      const remaining = totalSeconds % 3600;
+      const wholeMinutes = Math.floor(remaining / 60);
+      const seconds = remaining % 60;
+      return hours ? `${hours}h ${wholeMinutes}m ${seconds}s` : `${wholeMinutes}m ${seconds}s`;
+    }
+
+    function calculateManualEndMillCycle(unit, manualHeader = unit.manualHeader) {
+      const normalizedToolName = String(manualHeader?.toolName || "").toUpperCase().replace(/[\s-]+/g, "");
+      if (normalizedToolName !== "ENDMILL") return null;
+      const sequences = unit.sequences.filter(sequence => sequence.contextCommand === "G420");
+      let previousZ = null;
+      let modalFeed = null;
+      let modalSpindle = null;
+      let feedMode = "G95";
+      let motionMode = null;
+      let totalMinutes = 0;
+      let cuttingDistance = 0;
+      let dwellSeconds = 0;
+      const spindleSpeeds = new Set();
+      const feedModes = new Set();
+      const moves = [];
+
+      sequences.forEach(sequence => {
+        const block = sequence.blocks[0];
+        const row = sequence.manualRow || block.manualRow || parseManualSequenceRow(block);
+        const g1 = Number(row.g1);
+        const g2 = Number(row.g2);
+        if (g1 === 95) feedMode = "G95";
+        else if (g1 === 94) feedMode = "G94";
+        if (row.g2 !== "" && Number.isFinite(g2)) motionMode = g2;
+        else if (row.g1 !== "" && Number.isFinite(g1) && g1 === 0) motionMode = 0;
+
+        const feedItem = row.data.find(item => item.address === "F");
+        const feed = Number(feedItem?.value);
+        if (feedItem && Number.isFinite(feed) && feed > 0) modalFeed = feed;
+
+        const spindle = Number(row.spindle);
+        if (Number.isFinite(spindle) && spindle > 0) {
+          modalSpindle = spindle;
+          spindleSpeeds.add(spindle);
+        }
+
+        if (motionMode === 4) {
+          const dwellItem = row.data.find(item => item.address === "X");
+          const dwell = Number(dwellItem?.value);
+          if (dwellItem && Number.isFinite(dwell) && dwell > 0) {
+            dwellSeconds += dwell;
+            totalMinutes += dwell / 60;
+          }
+        }
+
+        const zItem = row.data.find(item => item.address === "Z");
+        const nextZ = Number(zItem?.value);
+        if (!zItem || !Number.isFinite(nextZ)) return;
+        const distance = previousZ === null ? 0 : Math.abs(nextZ - previousZ);
+        const isFeedMove = motionMode === 1 || (motionMode === null && modalFeed !== null);
+        const effectiveFeed = feedMode === "G95"
+          ? (modalFeed !== null && modalSpindle !== null ? modalFeed * modalSpindle : null)
+          : modalFeed;
+        if (distance > 0 && isFeedMove && effectiveFeed !== null && effectiveFeed > 0) {
+          const minutes = distance / effectiveFeed;
+          cuttingDistance += distance;
+          totalMinutes += minutes;
+          feedModes.add(feedMode);
+          moves.push({
+            sequenceNumber: row.sequenceNumber,
+            fromZ: previousZ,
+            toZ: nextZ,
+            distance,
+            feedMode,
+            programmedFeed: modalFeed,
+            spindle: modalSpindle,
+            effectiveFeed,
+            minutes
+          });
+        }
+        previousZ = nextZ;
+      });
+
+      if (!moves.length) return null;
+      return {
+        totalMinutes,
+        formattedTime: formatManualCycleDuration(totalMinutes),
+        cuttingDistance,
+        dwellSeconds,
+        moveCount: moves.length,
+        spindleSpeeds: [...spindleSpeeds],
+        feedModes: [...feedModes],
+        moves,
+        scope: "G95 uses F × RPM and G94 uses F as IPM; G4 X dwell is included; rapid moves, acceleration, and tool-change time excluded"
+      };
+    }
+
+    window.calculateManualEndMillCycle = calculateManualEndMillCycle;
+
     function renderManualUnit(unit) {
       const setup = blockFor(unit, "G305") || unit.blocks[0];
       const manualHeader = unit.manualHeader || setup?.manualHeader || parseManualUnitHeader(setup);
@@ -2671,7 +2773,17 @@
         ];
       });
       const rows = shapeRows.length ? shapeRows : [[mzCell("", "row-no"), mzCell(""), mzCell(""), ...Array.from({ length: 12 }, () => mzCell("")), mzCell(""), mzCell("")]];
-      return `<section class="mz-unit manual-unit">${renderMzTable(unitHeaders, [unitRow], "unit-head")}${renderMzTable(shapeHeaders, rows, "fig-head")}</section>`;
+      const cycle = calculateManualEndMillCycle(unit, manualHeader);
+      const cycleMarkup = cycle ? `<div class="manual-cycle-time" title="${escapeHtml(cycle.scope)}">
+        <span class="cycle-label">EST. Z CUT TIME</span>
+        <strong class="cycle-value">${escapeHtml(cycle.formattedTime)}</strong>
+        <span class="cycle-detail">${escapeHtml(cycle.cuttingDistance.toFixed(4).replace(/0+$/, "").replace(/\.$/, ""))} IN · ${cycle.moveCount} FEED MOVE${cycle.moveCount === 1 ? "" : "S"}</span>
+        <span class="cycle-detail">${escapeHtml(cycle.feedModes.join(" / "))}</span>
+        <span class="cycle-detail">RPM ${cycle.spindleSpeeds.length ? cycle.spindleSpeeds.map(value => escapeHtml(value)).join(" / ") : "—"}</span>
+        ${cycle.dwellSeconds ? `<span class="cycle-detail">G4 DWELL ${escapeHtml(cycle.dwellSeconds)}S</span>` : ""}
+        <span class="cycle-detail">Z-FEED ESTIMATE ONLY</span>
+      </div>` : "";
+      return `<section class="mz-unit manual-unit">${renderMzTable(unitHeaders, [unitRow], "unit-head")}${renderMzTable(shapeHeaders, rows, "fig-head")}${cycleMarkup}</section>`;
     }
 
     function renderGenericUnit(unit) {
