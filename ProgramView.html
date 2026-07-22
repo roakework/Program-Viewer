@@ -506,13 +506,15 @@
       const parts = [`N${n}`];
       const ga = view.getUint16(base + 20, true);
       const gb = view.getUint16(base + 22, true);
-      if (ga) parts.push(`GA${ga}`);
-      if (gb || ga) parts.push(`GB${gb}`);
-      for (let slot = 0; slot < 5; slot += 1) {
+      const hasGa = Boolean(record[4] & 1) || ga !== 0;
+      const hasGb = Boolean(record[4] & 2) || gb !== 0;
+      if (hasGa) parts.push(`GA${ga}`);
+      if (hasGb) parts.push(`GB${gb}`);
+      for (let slot = 0; slot < 6; slot += 1) {
         const address = PBM_MANUAL_ADDRESS[record[8 + slot]];
         if (address) parts.push(`${address}${pbmNumber(pbmFixed(view, base, 36 + slot * 4))}`);
       }
-      const spindle = pbmInt(view, base, 56);
+      const spindle = pbmInt(view, base, 60);
       const machine = view.getUint16(base + 24, true);
       if (spindle) parts.push(`SA${pbmNumber(spindle / 1000)}`);
       if (machine) parts.push(`MA${machine}`);
