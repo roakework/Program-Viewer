@@ -1,0 +1,2071 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mazatrol Conversational Viewer — Feature 1 v2.1</title>
+  <style>
+    :root {
+      --bg: #020607;
+      --panel: #071013;
+      --panel-2: #0b181c;
+      --line: #1b4b55;
+      --cyan: #31e7ff;
+      --yellow: #ffe65b;
+      --white: #f7fbfc;
+      --muted: #79a4ac;
+      --danger: #ff6b6b;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--white);
+      background:
+        linear-gradient(rgba(49, 231, 255, 0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(49, 231, 255, 0.025) 1px, transparent 1px),
+        var(--bg);
+      background-size: 28px 28px;
+      font-family: Consolas, "Courier New", monospace;
+    }
+
+    button, textarea, input { font: inherit; }
+
+    .app { width: min(1500px, 100%); margin: auto; padding: 20px; }
+
+    .machine-header {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 14px 18px;
+      border: 1px solid var(--line);
+      border-bottom: 3px solid var(--cyan);
+      background: #061114;
+    }
+
+    h1 { margin: 0; color: var(--cyan); font-size: clamp(1.15rem, 2vw, 1.7rem); letter-spacing: .08em; }
+    .subtitle { margin-top: 6px; color: var(--muted); font-size: .78rem; }
+    .status { color: var(--yellow); font-size: .82rem; white-space: nowrap; }
+
+    .workbench {
+      display: grid;
+      grid-template-columns: minmax(280px, 390px) minmax(0, 1fr);
+      gap: 14px;
+      margin-top: 14px;
+    }
+
+    .panel { border: 1px solid var(--line); background: rgba(7, 16, 19, .96); }
+    .panel-title { padding: 9px 12px; color: var(--cyan); background: var(--panel-2); border-bottom: 1px solid var(--line); letter-spacing: .06em; }
+    .input-body { padding: 12px; }
+
+    .drop-zone {
+      display: block;
+      padding: 18px 12px;
+      text-align: center;
+      border: 1px dashed #2e8998;
+      color: var(--cyan);
+      background: #061317;
+      cursor: pointer;
+    }
+
+    .drop-zone.dragging { border-color: var(--yellow); color: var(--yellow); background: #161706; }
+    .drop-zone small { display: block; color: var(--muted); margin-top: 6px; }
+    #fileInput { display: none; }
+
+    textarea {
+      width: 100%;
+      min-height: 365px;
+      margin-top: 12px;
+      resize: vertical;
+      border: 1px solid var(--line);
+      outline: none;
+      padding: 11px;
+      color: var(--white);
+      background: #010506;
+      line-height: 1.45;
+      font-size: .78rem;
+    }
+
+    textarea:focus { border-color: var(--cyan); }
+    .actions { display: flex; gap: 8px; margin-top: 10px; }
+
+    button {
+      flex: 1;
+      padding: 9px 12px;
+      border: 1px solid var(--cyan);
+      color: #001013;
+      background: var(--cyan);
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    button.secondary { color: var(--cyan); background: transparent; }
+    button:hover { filter: brightness(1.12); }
+    .error { min-height: 1.2em; margin-top: 9px; color: var(--danger); font-size: .78rem; }
+
+    .program-banner {
+      display: grid;
+      grid-template-columns: max-content max-content 1fr max-content;
+      gap: 18px;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      background: #030a0c;
+    }
+
+    .label { color: var(--yellow); }
+    .value { color: var(--white); }
+    .empty { padding: 50px 20px; text-align: center; color: var(--muted); }
+    .units { overflow-x: auto; }
+
+    .unit {
+      display: grid;
+      grid-template-columns: 112px 160px minmax(360px, 1fr);
+      min-width: 690px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .unit-number, .unit-name, .unit-data { padding: 12px; }
+    .unit-number { color: var(--cyan); background: #07171b; font-size: 1.08rem; font-weight: 700; border-right: 1px solid var(--line); }
+    .unit-name { color: var(--white); border-right: 1px solid var(--line); }
+    .unit-data { display: grid; gap: 9px; }
+
+    .command-row { display: grid; grid-template-columns: 74px minmax(0, 1fr); gap: 10px; align-items: start; }
+    .command { color: var(--cyan); }
+    .pairs { display: flex; flex-wrap: wrap; gap: 6px 12px; }
+    .pair { white-space: nowrap; }
+    .pair-key { color: var(--yellow); }
+    .pair-value { color: var(--white); }
+    .sequence { margin: 3px 0 2px 10px; border-left: 3px solid var(--yellow); background: #0c1415; }
+    .sequence-head { padding: 7px 10px; color: var(--yellow); border-bottom: 1px solid #263e42; }
+    .sequence-body { padding: 8px 10px; display: grid; gap: 7px; }
+
+    .command-name { display: block; margin-top: 2px; color: var(--muted); font-size: .68rem; line-height: 1.15; }
+    .execution-strip { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; padding: 9px 14px; border-bottom: 1px solid var(--line); background: #071316; }
+    .order-badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 7px; border: 1px solid var(--yellow); border-radius: 3px; color: var(--yellow); background: #171603; font-size: .7rem; font-weight: 700; white-space: nowrap; }
+    .highlight-row { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 7px; padding: 7px 9px; border: 1px solid #7d7128; background: #171603; }
+    .tool-detail { white-space: nowrap; }
+
+    /* Mazak-monitor table surface */
+    .workbench { display: block; }
+    .workbench > .panel:first-child { margin-bottom: 14px; }
+    textarea { min-height: 180px; }
+    .mz-screen { min-width: 1120px; padding: 0 0 28px; background: #000018; overflow: hidden; }
+    .mz-unit { margin-bottom: 29px; }
+    .mz-unit:last-child { margin-bottom: 0; }
+    .mz-table { width: 100%; border-collapse: collapse; table-layout: auto; color: #fff; background: #000; }
+    .mz-table th, .mz-table td { height: 30px; padding: 2px 6px; border: 1px solid #4e535b; text-align: center; white-space: nowrap; font-size: 1rem; font-weight: 400; }
+    .mz-table th { color: #000; }
+    .mz-table .unit-head th { background: linear-gradient(#68a5ff, #3f73dc); }
+    .mz-table .tool-head th { background: linear-gradient(#ffe986, #eed05a); }
+    .mz-table .fig-head th { background: #9ceda4; }
+    .mz-table .row-no { width: 42px; min-width: 42px; color: #000; background: #e7e7e7; text-align: right; }
+    .mz-table .op { color: #00ff2f; text-align: left; }
+    .mz-table .priority { color: #fff500; font-size: 1.08rem; }
+    .mz-table .green { color: #00ff2f; }
+    .mz-table .yellow { color: #fff500; }
+    .mz-table .red { color: #ff2525; }
+    .mz-table .magenta { color: #fff; background: #ed00d9; }
+    .mz-table .left { text-align: left; }
+    .mz-table .fill { width: 100%; }
+    .mz-table .diamond { font-size: 1.15rem; }
+    .mz-table .narrow { width: 36px; min-width: 36px; padding-left: 3px; padding-right: 3px; }
+    .mz-table .wide { min-width: 125px; }
+    .mz-order-note { padding: 7px 10px; color: #fff500; border-bottom: 1px solid #3a4150; background: #070720; font-size: .78rem; }
+    .mz-preserved { margin: 0; border: 0; border-top: 1px solid #34404d; background: #02020e; }
+    .mz-preserved summary { padding: 6px 10px; color: #76aab4; font-size: .7rem; }
+    .mz-preserved pre { max-height: 260px; color: #b6d3d8; background: #010107; white-space: pre-wrap; }
+    .manual-raw-box { border: 1px solid #4e535b; border-top: 0; background: #000; }
+    .manual-raw-title { padding: 6px 10px; color: #000; background: linear-gradient(#ffe986, #eed05a); font-size: .9rem; }
+    .manual-raw-code { margin: 0; max-height: none; padding: 10px 12px; border: 0; color: #fff; background: #000; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.55; font-size: .9rem; }
+    .manual-unit .mz-table th, .manual-unit .mz-table td { height: 30px; padding-top: 1px; padding-bottom: 1px; }
+    .manual-unit .mz-table th:first-child, .manual-unit .mz-table td:first-child { width: 44px; min-width: 44px; }
+    .manual-unit .manual-address { width: 28px; min-width: 28px; padding-left: 3px; padding-right: 3px; }
+    .manual-unit .manual-data-value { width: 105px; min-width: 88px; }
+    .manual-unit .fig-head th { font-size: .9rem; }
+    [hidden] { display: none !important; }
+    .view-tabs { display: flex; gap: 6px; margin-top: 14px; border-bottom: 2px solid var(--cyan); }
+    .view-tab { flex: 0 0 auto; min-width: 180px; color: var(--cyan); background: #071013; border-color: var(--line); border-bottom: 0; }
+    .view-tab.active { color: #001013; background: var(--cyan); border-color: var(--cyan); }
+    .program-file-tabs { display: flex; gap: 5px; margin: 14px 0 0; padding: 0 8px; overflow-x: auto; border-bottom: 2px solid #4f81e1; background: #03090b; }
+    .program-file-tab { flex: 0 0 auto; min-width: 150px; max-width: 280px; padding: 8px 12px; overflow: hidden; color: #9bc4ff; background: #0b181c; border-color: #375c65; border-bottom: 0; text-overflow: ellipsis; white-space: nowrap; cursor: grab; }
+    .program-file-tab.active { color: #001013; background: linear-gradient(#68a5ff, #3f73dc); border-color: #68a5ff; }
+    .program-file-tab.dragging { opacity: .35; cursor: grabbing; }
+    .program-file-tab.drag-before { box-shadow: inset 4px 0 0 var(--yellow); }
+    .program-file-tab.drag-after { box-shadow: inset -4px 0 0 var(--yellow); }
+    .tool-summary-panel { margin-top: 14px; }
+    .tool-summary-titlebar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 7px 10px 7px 12px; color: var(--cyan); background: var(--panel-2); border-bottom: 1px solid var(--line); letter-spacing: .06em; }
+    .excel-export-button { flex: 0 0 auto; padding: 6px 12px; color: #001013; background: var(--yellow); border-color: var(--yellow); font-size: .78rem; letter-spacing: .03em; }
+    .excel-export-button:disabled { cursor: not-allowed; filter: grayscale(1); opacity: .45; }
+    .tool-summary-wrap { overflow-x: auto; background: #000018; }
+    .tool-summary-table { width: 100%; min-width: 820px; border-collapse: collapse; background: #000; }
+    .tool-summary-table th { padding: 8px 10px; border: 1px solid #4e535b; color: #000; background: linear-gradient(#68a5ff, #3f73dc); font-weight: 400; white-space: nowrap; }
+    .tool-summary-table td { padding: 8px 10px; border: 1px solid #4e535b; color: #fff; text-align: center; vertical-align: top; }
+    .tool-summary-table .summary-unit, .tool-summary-table .summary-tool { color: #00ff2f; }
+    .tool-summary-table .summary-tool { text-align: left; }
+    .tool-summary-table .summary-location { color: #fff500; white-space: nowrap; }
+    .tool-summary-table .priority { color: #fff500; }
+    .tool-summary-table .magenta { color: #fff; background: #ed00d9; }
+    .tool-summary-empty { padding: 24px; color: var(--muted); text-align: center; }
+    .tool-card { margin: 12px; border: 1px solid #375c65; background: #03090b; }
+    .tool-card-head { display: grid; grid-template-columns: max-content minmax(250px, 1fr) max-content max-content; align-items: center; gap: 12px; padding: 9px 12px; color: #fff; background: #0b181c; border-bottom: 1px solid #375c65; list-style: none; cursor: pointer; }
+    .tool-card-head::-webkit-details-marker { display: none; }
+    .tool-collapse-indicator { color: var(--yellow); transition: transform .15s ease; }
+    .tool-card:not([open]) .tool-collapse-indicator { transform: rotate(-90deg); }
+    .tool-card-number { color: #00ff2f; }
+    .tool-card-number { font-size: 1.05rem; }
+    .multi-unit-badge { padding: 3px 7px; color: #001013; background: var(--yellow); font-size: .7rem; font-weight: 700; }
+    .single-unit-badge { padding: 3px 7px; color: var(--muted); border: 1px solid #375c65; font-size: .7rem; }
+    .tool-units { color: var(--cyan); white-space: nowrap; }
+    .tool-callout-table { min-width: 760px; }
+    .program-document + .program-document { margin-top: 22px; border-top: 3px solid var(--cyan); }
+
+    details { margin-top: 14px; border: 1px solid var(--line); background: var(--panel); }
+    summary { padding: 10px 12px; color: var(--cyan); cursor: pointer; }
+    pre { max-height: 420px; overflow: auto; margin: 0; padding: 13px; border-top: 1px solid var(--line); color: #d8f7fb; font-size: .76rem; }
+
+    @media (max-width: 850px) {
+      .workbench { grid-template-columns: 1fr; }
+      textarea { min-height: 230px; }
+      .program-banner { grid-template-columns: 1fr; gap: 5px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header class="machine-header">
+      <div>
+        <h1>MAZATROL CONVERSATIONAL VIEWER</h1>
+        <div class="subtitle">FEATURE 1 v2.1 · PARSER + GRID ENGINE</div>
+      </div>
+      <div class="status" id="status">READY</div>
+    </header>
+
+    <nav class="view-tabs" id="viewTabs" aria-label="Application views" hidden>
+      <button class="view-tab active" id="programTabButton" type="button" data-view="program">PROGRAM VIEW</button>
+      <button class="view-tab" id="toolsTabButton" type="button" data-view="tools">TOOL USAGE</button>
+    </nav>
+
+    <div id="programView">
+    <section class="workbench">
+      <aside class="panel">
+        <div class="panel-title">PAM INPUT</div>
+        <div class="input-body">
+          <label class="drop-zone" id="dropZone" for="fileInput">
+            LOAD .PAM / .TXT FILES
+            <small>Click or drag all face programs here</small>
+          </label>
+          <input id="fileInput" type="file" accept=".pam,.txt,text/plain" multiple>
+          <textarea id="source" spellcheck="false" aria-label="Raw PAM data" placeholder="Uploaded PAM programs will appear here" readonly></textarea>
+          <div class="error" id="error" role="alert"></div>
+        </div>
+      </aside>
+
+      <nav class="program-file-tabs" id="programFileTabs" aria-label="Uploaded PAM programs" hidden></nav>
+
+      <section class="panel" aria-live="polite">
+        <div class="panel-title">CONVERSATIONAL PROGRAM GRID</div>
+        <div id="viewer"><div class="empty">UPLOAD A .PAM FILE TO BEGIN</div></div>
+      </section>
+    </section>
+
+    <details>
+      <summary>STRUCTURED JSON OUTPUT</summary>
+      <pre id="jsonOutput">{}</pre>
+    </details>
+    </div>
+
+    <section class="panel tool-summary-panel" id="toolsView" hidden>
+      <div class="tool-summary-titlebar">
+        <span>TOOL USAGE · CROSS-UNIT SUMMARY</span>
+        <button class="excel-export-button" id="exportToolUsageButton" type="button" disabled>EXPORT TO EXCEL</button>
+      </div>
+      <div class="tool-summary-wrap" id="toolSummary"></div>
+    </section>
+  </main>
+
+  <script>
+    // ---------- Feature 1: pure parser engine ----------
+    function decodeHexUtf8(hex) {
+      if (!hex || hex.length % 2 !== 0 || !/^[0-9a-f]+$/i.test(hex)) return null;
+      try {
+        const bytes = new Uint8Array(hex.match(/.{2}/g).map(byte => parseInt(byte, 16)));
+        const decoded = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+        return /^[\x20-\x7e\s]+$/.test(decoded) ? decoded : null;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    function extractParameters(source) {
+      const parameters = [];
+      // PAM fields are commonly packed together: U2H0.Z0.025I1.
+      // Ampersands may prefix either the field or its value: &Q0 / X&-2.7.
+      const pattern = /(&?)([A-Z]{1,3})(&?)([-+]?(?:\d+(?:\.\d*)?|\.\d+))/gi;
+      let match;
+      while ((match = pattern.exec(source)) !== null) {
+        const rawValue = `${match[3]}${match[4]}`;
+        parameters.push({
+          key: match[2].toUpperCase(),
+          value: Number(match[4]),
+          rawValue,
+          rawToken: match[0],
+          continuation: Boolean(match[1] || match[3])
+        });
+      }
+      return parameters;
+    }
+
+    function splitCommandBlocks(text) {
+      const normalized = text.replace(/\r\n?/g, "\n").trim();
+      if (!normalized) return [];
+
+      // G-codes and N markers can appear mid-line in PAM backups.
+      const starts = [];
+      const marker = /(^|\s)(G\d{3}|N\d+)(?=[A-Z\s]|$)/gim;
+      let match;
+      while ((match = marker.exec(normalized)) !== null) {
+        starts.push(match.index + match[1].length);
+      }
+      if (!starts.length) return [normalized];
+      if (starts[0] > 0) starts.unshift(0);
+
+      return starts.map((start, index) =>
+        normalized.slice(start, starts[index + 1] ?? normalized.length).trim()
+      ).filter(Boolean);
+    }
+
+    function normalizePriority(parameter) {
+      if (!parameter) return { value: null, rawValue: null, encodedRawValue: null, isLate: false };
+      const encodedRawValue = parameter.rawValue.replace(/^&/, "");
+      const isLate = parameter.value < 0 || encodedRawValue.startsWith("-");
+      const rawValue = encodedRawValue.replace(/^-/, "");
+      return {
+        value: Math.abs(parameter.value),
+        rawValue,
+        encodedRawValue,
+        isLate
+      };
+    }
+
+    function makeBlock(raw, sourceLine) {
+      const commandMatch = raw.match(/^(G\d{3}|N\d+)/i);
+      const command = commandMatch ? commandMatch[1].toUpperCase() : "RAW";
+      const commandLabels = {
+        G300: "Initial Setup",
+        G301: "End",
+        G303: "Sub Program",
+        G305: "Manual Unit",
+        G350: "Drilling",
+        G356: "Circle Mill",
+        G369: "Chamfer Out",
+        G380: "Offset",
+        G371: "Cycle",
+        G424: "Tool Process",
+        G420: "Geometry"
+      };
+      const hexMatches = [...raw.matchAll(/\(([0-9A-F]{4,})\)/gi)];
+      const decodedText = hexMatches.map(item => decodeHexUtf8(item[1])).find(Boolean) || null;
+      const comments = [...raw.matchAll(/\(([^)]*)\)/g)]
+        .map(item => item[1].trim())
+        .filter(comment => comment && !decodeHexUtf8(comment));
+      const parameterSource = raw
+        .slice(commandMatch ? commandMatch[0].length : 0)
+        .replace(/\([^)]*\)/g, " ");
+      const parameters = extractParameters(parameterSource);
+      const priorityParameter = parameters.find(item => item.key === "P");
+      const priorityInfo = normalizePriority(priorityParameter);
+      const toolNumber = parameters.find(item => item.key === "T");
+      const nominalDiameter = parameters.find(item => item.key === "D");
+      return {
+        command,
+        commandName: commandLabels[command] || (command.startsWith("N") ? "Sequence" : "Unmapped Command"),
+        parameters,
+        priority: priorityInfo.value,
+        priorityRaw: priorityInfo.rawValue,
+        priorityEncodedRaw: priorityInfo.encodedRawValue,
+        priorityIsLate: priorityInfo.isLate,
+        tool: toolNumber || comments[0] ? {
+          number: toolNumber?.value ?? null,
+          numberRaw: toolNumber?.rawValue ?? null,
+          nominalDiameter: nominalDiameter?.value ?? null,
+          nominalDiameterRaw: nominalDiameter?.rawValue ?? null,
+          name: comments[0] || null
+        } : null,
+        comments,
+        decodedText,
+        raw,
+        sourceLine
+      };
+    }
+
+    const CONTEXTUAL_MAPPING_DICTIONARY = Object.freeze({
+      unitContexts: {
+        setup: {
+          unitNumbers: [0], commands: ["G300"],
+          fields: { Z: "INITIAL-Z", HEX: "MAT" }
+        },
+        endProgram: {
+          commands: ["G301"],
+          fields: {}
+        },
+        subProgram: {
+          commands: ["G303"],
+          fields: {}
+        },
+        offset: {
+          unitNumbers: [1], commands: ["G380"],
+          fields: { X: "U(X)", Y: "V(Y)", D: "D(th)", Z: "W(Z)" }
+        },
+        faceMill: {
+          commands: ["G371"],
+          fields: { H: "DEPTH", Z: ["SRV-Z", "FIN-Z"], I: "BTM" }
+        },
+        drilling: {
+          commands: ["G350"],
+          fields: {}
+        },
+        circleMill: {
+          commands: ["G356"],
+          fields: {}
+        },
+        chamferOut: {
+          commands: ["G369"],
+          fields: {}
+        },
+        cborTap: {
+          unitNumbers: [3], commands: ["G357"],
+          fields: { D: "MAJOR-Ø", V: "TAP-DEP" }
+        },
+        manual: {
+          commands: ["G305"],
+          fields: { T: "Tool No.", D: "NOM-Ø", S: "TOOL CODE", P: "No." }
+        }
+      },
+      sequence: {
+        P: "No.",
+        S: "C-SP",
+        J: "FR",
+        T: "Tool No.",
+        D: "NOM-Ø",
+        X: "APRCH-X",
+        Y: "APRCH-Y",
+        E: "HOLE-Ø",
+        H: "HOLE-DEP"
+      },
+      manualShape: {
+        GA: "G1",
+        GB: "G2",
+        X: "DATA 1",
+        Y: "DATA 2",
+        Z: "DATA 3",
+        F: "DATA 4",
+        SA: "S",
+        MA: "M/B"
+      },
+      toolCallouts: {
+        14: "FCE MILL",
+        2: "DRILL",
+        5: "TAP",
+        13: "CHAMFER",
+        15: "END MILL"
+      }
+    });
+
+    function contextualValue(parameter) {
+      if (!parameter) return null;
+      if (parameter.rawValue.startsWith("&")) return parameter.rawValue;
+      return parameter.rawToken.startsWith("&") ? `&${parameter.rawValue}` : parameter.rawValue;
+    }
+
+    function resolveUnitType(unitNumber, command, previousType = null) {
+      // Explicit command markers take precedence over conventional Unit numbers.
+      for (const [type, definition] of Object.entries(CONTEXTUAL_MAPPING_DICTIONARY.unitContexts)) {
+        if (definition.commands?.includes(command)) return type;
+      }
+      for (const [type, definition] of Object.entries(CONTEXTUAL_MAPPING_DICTIONARY.unitContexts)) {
+        if (definition.unitNumbers?.includes(Number(unitNumber))) return type;
+      }
+      return previousType || "generic";
+    }
+
+    function addMappedField(mappedFields, label, parameter) {
+      if (!parameter || !label) return;
+      const value = label === "No." ? normalizePriority(parameter).rawValue : contextualValue(parameter);
+      if (!(label in mappedFields)) mappedFields[label] = value;
+      else if (Array.isArray(mappedFields[label])) mappedFields[label].push(value);
+      else mappedFields[label] = [mappedFields[label], value];
+    }
+
+    function applyContextualMapping(block, context) {
+      const mappedFields = {};
+      const isSequence = /^N\d+$/i.test(block.command);
+      const isManualShape = isSequence && context.unitType === "manual" && context.sectionCommand === "G420";
+      const mapping = isManualShape
+        ? CONTEXTUAL_MAPPING_DICTIONARY.manualShape
+        : isSequence
+        ? CONTEXTUAL_MAPPING_DICTIONARY.sequence
+        : (CONTEXTUAL_MAPPING_DICTIONARY.unitContexts[context.unitType]?.fields || {});
+
+      const occurrences = {};
+      block.parameters.forEach(parameter => {
+        const target = mapping[parameter.key];
+        if (!target) return;
+        const occurrence = occurrences[parameter.key] || 0;
+        const label = Array.isArray(target) ? (target[occurrence] || target[target.length - 1]) : target;
+        addMappedField(mappedFields, label, parameter);
+        occurrences[parameter.key] = occurrence + 1;
+      });
+
+      if (!isSequence && mapping.HEX && block.decodedText) mappedFields[mapping.HEX] = block.decodedText;
+      if (context.unitType === "manual") {
+        if (block.command === "G305") mappedFields["Raw Data"] = block.raw;
+        if (block.command === "G420" || (isSequence && context.sectionCommand === "G420")) {
+          mappedFields["Shape Data"] = block.raw;
+        }
+      }
+      if (!isSequence && context.unitType === "manual" && block.command === "G305") {
+        const toolNumber = block.tool?.number;
+        const inferredName = block.tool?.name || CONTEXTUAL_MAPPING_DICTIONARY.toolCallouts[toolNumber] ||
+          (toolNumber !== null && toolNumber !== undefined ? `TOOL ${toolNumber}` : "UNMAPPED");
+        mappedFields["Tool Name"] = inferredName;
+      }
+      if (isSequence) {
+        const toolNumber = block.tool?.number;
+        const inferredName = block.tool?.name || CONTEXTUAL_MAPPING_DICTIONARY.toolCallouts[toolNumber] ||
+          (context.unitType === "faceMill" ? "FCE MILL" : toolNumber !== null && toolNumber !== undefined ? `TOOL ${toolNumber}` : null);
+        if (inferredName) mappedFields["Tool Name"] = inferredName;
+      }
+      return mappedFields;
+    }
+
+    function manualParameter(block, key, occurrence = 0) {
+      return block.parameters.filter(parameter => parameter.key === key)[occurrence] || null;
+    }
+
+    function parsedPriority(block) {
+      return normalizePriority(manualParameter(block, "P"));
+    }
+
+    function parseManualUnitHeader(block) {
+      const toolParameter = manualParameter(block, "T");
+      const diameterParameter = manualParameter(block, "D");
+      const priorityParameter = manualParameter(block, "P");
+      const priorityInfo = normalizePriority(priorityParameter);
+      const toolCodeParameter = manualParameter(block, "S");
+      const toolNumber = toolParameter?.value ?? null;
+      return {
+        unitName: "MANL PRG",
+        toolNumber,
+        toolName: block.comments[0] || CONTEXTUAL_MAPPING_DICTIONARY.toolCallouts[toolNumber] ||
+          (toolNumber !== null ? `TOOL ${toolNumber}` : "UNMAPPED"),
+        nominalDiameter: contextualValue(diameterParameter),
+        toolFlag: toolCodeParameter?.value === 3 ? "C" : "",
+        priority: priorityInfo.rawValue || "",
+        priorityIsLate: priorityInfo.isLate,
+        raw: block.raw
+      };
+    }
+
+    function parseManualSequenceRow(block) {
+      const dataKeys = ["X", "Y", "Z", "F"];
+      const data = Array.from({ length: 6 }, (_, index) => {
+        const key = dataKeys[index];
+        const parameter = key ? manualParameter(block, key) : null;
+        return parameter
+          ? { address: key, value: contextualValue(parameter), rawToken: parameter.rawToken }
+          : { address: "", value: "", rawToken: "" };
+      });
+      const g1 = manualParameter(block, "GA");
+      const g2 = manualParameter(block, "GB");
+      const spindle = manualParameter(block, "SA");
+      const mCode = manualParameter(block, "MA");
+      return {
+        sequenceNumber: Number(block.command.slice(1)),
+        g1: contextualValue(g1) || "",
+        g2: contextualValue(g2) || "",
+        data,
+        spindle: contextualValue(spindle) || "",
+        mCode: mCode ? { address: "M", value: contextualValue(mCode), rawToken: mCode.rawToken } : null,
+        raw: block.raw
+      };
+    }
+
+    // Unit 2 / G371 Face Mill rules. Kept separate from all other Unit parsers.
+    function faceMillValue(block, key, occurrence = 0) {
+      const parameter = manualParameter(block, key, occurrence);
+      return parameter ? contextualValue(parameter).replace(/^&/, "") : "";
+    }
+
+    function parseFaceMillHeader(block) {
+      return {
+        unitName: "FCE MILL",
+        depth: faceMillValue(block, "H"),
+        serviceZ: faceMillValue(block, "Z", 0),
+        bottom: faceMillValue(block, "I"),
+        finishZ: faceMillValue(block, "Z", 1),
+        raw: block.raw
+      };
+    }
+
+    function parseFaceMillToolRow(block) {
+      const toolNumber = manualParameter(block, "T")?.value ?? null;
+      const sCode = manualParameter(block, "S")?.value ?? null;
+      const typeCode = manualParameter(block, "K")?.value ?? null;
+      const priorityInfo = parsedPriority(block);
+      return {
+        sequenceNumber: Number(block.command.slice(1)),
+        toolNumber,
+        toolName: block.comments[0] || CONTEXTUAL_MAPPING_DICTIONARY.toolCallouts[toolNumber] || "FCE MILL",
+        nominalDiameter: faceMillValue(block, "D"),
+        diameterFlag: sCode === -8 ? "H" : "",
+        priority: priorityInfo.rawValue || "",
+        priorityIsLate: priorityInfo.isLate,
+        approachX: faceMillValue(block, "X"),
+        approachY: faceMillValue(block, "Y"),
+        processType: typeCode === 0 ? "XBI" : (typeCode !== null ? `K${typeCode}` : ""),
+        zfd: "♦",
+        depthZ: faceMillValue(block, "Z"),
+        widthR: faceMillValue(block, "R"),
+        cuttingSpeed: faceMillValue(block, "I"),
+        feedRate: faceMillValue(block, "J"),
+        mCodes: [faceMillValue(block, "MA"), faceMillValue(block, "MB"), faceMillValue(block, "MC")],
+        raw: block.raw
+      };
+    }
+
+    function parseFaceMillGeometryRow(block) {
+      const pattern = manualParameter(block, "A")?.value;
+      return {
+        sequenceNumber: Number(block.command.slice(1)),
+        pattern: pattern === 1 ? "SQR" : (pattern !== null && pattern !== undefined ? `A${pattern}` : ""),
+        p1x: faceMillValue(block, "X", 0),
+        p1y: faceMillValue(block, "Y", 0),
+        p3x: faceMillValue(block, "X", 1),
+        p3y: faceMillValue(block, "Y", 1),
+        corners: ["", "", "", ""],
+        raw: block.raw
+      };
+    }
+
+    // Unit 3 / G357 CBOR-TAP rules. Kept separate from every other Unit parser.
+    function drillTapValue(block, key, occurrence = 0) {
+      const parameter = manualParameter(block, key, occurrence);
+      return parameter ? contextualValue(parameter).replace(/^&/, "") : "";
+    }
+
+    function parseDrillTapHeader(block) {
+      return {
+        unitName: "CBOR-TAP",
+        nominalDiameter: `UN${drillTapValue(block, "D", 0)}S-${drillTapValue(block, "V", 0)}`,
+        majorDiameter: drillTapValue(block, "E", 0),
+        pitch: drillTapValue(block, "P", 0),
+        tapDepth: drillTapValue(block, "H", 0),
+        chamfer: drillTapValue(block, "C", 0),
+        counterboreDiameter: drillTapValue(block, "D", 1),
+        counterboreDepth: drillTapValue(block, "H", 1),
+        counterboreChamfer: drillTapValue(block, "C", 1),
+        bottom: drillTapValue(block, "I", 0),
+        chip: drillTapValue(block, "K", 0),
+        raw: block.raw
+      };
+    }
+
+    function parseDrillTapToolRow(block) {
+      const toolNumber = manualParameter(block, "T")?.value ?? null;
+      const toolName = block.comments[0] || CONTEXTUAL_MAPPING_DICTIONARY.toolCallouts[toolNumber] ||
+        (toolNumber === 5 ? "TAP" : "DRILL");
+      const isTap = toolName === "TAP" || toolNumber === 5;
+      const sCode = manualParameter(block, "S")?.value ?? null;
+      const fCode = manualParameter(block, "F")?.value ?? null;
+      const flagByS = { 23: "Y", 24: "Z", 3: "C" };
+      const secondE = manualParameter(block, "E", 1)?.value ?? null;
+      const rough = isTap ? "FIX" : fCode === 19 ? "PCK2" : fCode === 2 ? "PCK1" : "DRIL";
+      const priorityInfo = parsedPriority(block);
+      return {
+        sequenceNumber: Number(block.command.slice(1)),
+        toolNumber,
+        toolName,
+        nominalDiameter: isTap
+          ? `UN${drillTapValue(block, "D", 0)}S-${drillTapValue(block, "V", 0)}`
+          : drillTapValue(block, "D", 0),
+        toolFlag: isTap ? "P" : (flagByS[sCode] || ""),
+        priority: priorityInfo.rawValue || "",
+        priorityIsLate: priorityInfo.isLate,
+        holeDiameter: drillTapValue(block, "E", 0),
+        holeDepth: drillTapValue(block, "H", 0),
+        preDiameter: isTap && secondE === 2 ? "PLANET" : drillTapValue(block, "E", 1),
+        preDepth: drillTapValue(block, "H", 1),
+        rough,
+        depthAddress: isTap ? "P" : "T",
+        depth: drillTapValue(block, "Z", 0),
+        peckDepth: "♦",
+        cuttingSpeed: drillTapValue(block, "I", 0),
+        feedRate: drillTapValue(block, "J", 0),
+        mCodes: [drillTapValue(block, "MA"), drillTapValue(block, "MB"), drillTapValue(block, "MC")],
+        raw: block.raw
+      };
+    }
+
+    function parseDrillTapGeometryRow(block) {
+      return {
+        sequenceNumber: Number(block.command.slice(1)),
+        pattern: manualParameter(block, "A")?.value === 1 ? "PT" : "",
+        z: drillTapValue(block, "Z", 0),
+        x: drillTapValue(block, "X", 0),
+        y: drillTapValue(block, "Y", 0),
+        indicators: ["♦", "♦", "♦", "♦", "♦", "♦", "♦"],
+        p: drillTapValue(block, "P", 0),
+        q: drillTapValue(block, "Q", 0),
+        r: drillTapValue(block, "R", 0),
+        raw: block.raw
+      };
+    }
+
+    // G356 Circle Mill rules. Isolated so existing Unit types remain unchanged.
+    function circleMillValue(block, key, occurrence = 0) {
+      const parameter = manualParameter(block, key, occurrence);
+      return parameter ? contextualValue(parameter).replace(/^&/, "") : "";
+    }
+
+    function parseCircleMillHeader(block) {
+      return {
+        unitName: "CIRC MIL",
+        tornado: circleMillValue(block, "K", 0),
+        diameter: circleMillValue(block, "D", 0),
+        depth: circleMillValue(block, "H", 0),
+        chamfer: circleMillValue(block, "C", 0),
+        bottom: circleMillValue(block, "I", 0),
+        preDiameter: "♦",
+        preChamfer: "♦",
+        pitch1: circleMillValue(block, "E", 0),
+        pitch2: circleMillValue(block, "F", 0),
+        raw: block.raw
+      };
+    }
+
+    function parseCircleMillToolRow(block) {
+      const toolNumber = manualParameter(block, "T")?.value ?? null;
+      const secondH = manualParameter(block, "H", 1)?.value ?? null;
+      const priorityInfo = parsedPriority(block);
+      return {
+        sequenceNumber: Number(block.command.slice(1)),
+        toolNumber,
+        toolName: block.comments[0] || CONTEXTUAL_MAPPING_DICTIONARY.toolCallouts[toolNumber] || "END MILL",
+        nominalDiameter: circleMillValue(block, "D", 0),
+        toolFlag: "",
+        priority: priorityInfo.rawValue || "",
+        priorityIsLate: priorityInfo.isLate,
+        holeDiameter: circleMillValue(block, "E", 0),
+        holeDepth: circleMillValue(block, "H", 0),
+        preDiameter: "♦",
+        preDepth: secondH === 2 ? "CCW" : circleMillValue(block, "H", 1),
+        rough: circleMillValue(block, "F", 0),
+        depthAddress: "C",
+        depth: circleMillValue(block, "Z", 0),
+        peckDepth: "♦",
+        cuttingSpeed: circleMillValue(block, "I", 0),
+        feedRate: circleMillValue(block, "J", 0),
+        mCodes: [circleMillValue(block, "MA"), circleMillValue(block, "MB"), circleMillValue(block, "MC")],
+        raw: block.raw
+      };
+    }
+
+    function parseCircleMillGeometryRow(block) {
+      return {
+        sequenceNumber: Number(block.command.slice(1)),
+        pattern: manualParameter(block, "A")?.value === 1 ? "PT" : "",
+        z: circleMillValue(block, "Z", 0),
+        x: circleMillValue(block, "X", 0),
+        y: circleMillValue(block, "Y", 0),
+        indicators: ["♦", "♦", "♦", "♦", "♦", "♦", "♦"],
+        p: circleMillValue(block, "P", 0),
+        q: circleMillValue(block, "Q", 0),
+        r: circleMillValue(block, "R", 0),
+        raw: block.raw
+      };
+    }
+
+    // G350 Drilling rules. Isolated so existing Unit types remain unchanged.
+    function drillingValue(block, key, occurrence = 0) {
+      const parameter = manualParameter(block, key, occurrence);
+      return parameter ? contextualValue(parameter).replace(/^&/, "") : "";
+    }
+
+    function parseDrillingHeader(block) {
+      return {
+        unitName: "DRILLING",
+        diameter: drillingValue(block, "D", 0),
+        depth: drillingValue(block, "H", 0),
+        chamfer: drillingValue(block, "C", 0),
+        raw: block.raw
+      };
+    }
+
+    function parseDrillingToolRow(block) {
+      const toolNumber = manualParameter(block, "T")?.value ?? null;
+      const sCode = manualParameter(block, "S")?.value ?? null;
+      const fCode = manualParameter(block, "F")?.value ?? null;
+      const flagByS = { 23: "Y", 24: "Z", 3: "C" };
+      const priorityInfo = parsedPriority(block);
+      return {
+        sequenceNumber: Number(block.command.slice(1)),
+        toolNumber,
+        toolName: block.comments[0] || CONTEXTUAL_MAPPING_DICTIONARY.toolCallouts[toolNumber] || "DRILL",
+        nominalDiameter: drillingValue(block, "D", 0),
+        toolFlag: flagByS[sCode] || "",
+        priority: priorityInfo.rawValue || "",
+        priorityIsLate: priorityInfo.isLate,
+        holeDiameter: drillingValue(block, "E", 0),
+        holeDepth: drillingValue(block, "H", 0),
+        preDiameter: drillingValue(block, "E", 1),
+        preDepth: drillingValue(block, "H", 1),
+        rough: fCode === 19 ? "PCK2" : fCode === 2 ? "PCK1" : "DRIL",
+        depthAddress: "T",
+        depth: drillingValue(block, "Z", 0),
+        peckDepth: "♦",
+        cuttingSpeed: drillingValue(block, "I", 0),
+        feedRate: drillingValue(block, "J", 0),
+        mCodes: [drillingValue(block, "MA"), drillingValue(block, "MB"), drillingValue(block, "MC")],
+        raw: block.raw
+      };
+    }
+
+    function parseDrillingGeometryRow(block) {
+      return {
+        sequenceNumber: Number(block.command.slice(1)),
+        pattern: manualParameter(block, "A")?.value === 1 ? "PT" : "",
+        z: drillingValue(block, "Z", 0),
+        x: drillingValue(block, "X", 0),
+        y: drillingValue(block, "Y", 0),
+        indicators: ["♦", "♦", "♦", "♦", "♦", "♦", "♦"],
+        p: drillingValue(block, "P", 0),
+        q: drillingValue(block, "Q", 0),
+        r: drillingValue(block, "R", 0),
+        raw: block.raw
+      };
+    }
+
+    // G303 Sub Program rules. Isolated so existing Unit types remain unchanged.
+    function parseSubProgramHeader(block) {
+      const repeatParameter = manualParameter(block, "F");
+      const numberParameter = manualParameter(block, "K");
+      const externalMarker = manualParameter(block, "E");
+      return {
+        unitName: "SUB PRO",
+        workNumber: block.decodedText || "",
+        workSuffix: externalMarker ? "E" : "",
+        dollarIndicator: "♦",
+        repeat: repeatParameter?.value ? contextualValue(repeatParameter).replace(/^&/, "") : "",
+        number: numberParameter?.value ? contextualValue(numberParameter).replace(/^&/, "") : "",
+        raw: block.raw
+      };
+    }
+
+    // G301 End Unit rules. Isolated so existing Unit types remain unchanged.
+    function parseEndProgramHeader(block) {
+      const continueParameter = manualParameter(block, "B");
+      const numberParameter = manualParameter(block, "C");
+      return {
+        unitName: "END",
+        continuous: continueParameter ? contextualValue(continueParameter).replace(/^&/, "") : "",
+        number: numberParameter ? contextualValue(numberParameter).replace(/^&/, "") : "",
+        atc: "",
+        angle: "",
+        direction: "",
+        returnMode: "",
+        workNumber: "♦",
+        execute: "♦",
+        raw: block.raw
+      };
+    }
+
+    // G369 Chamfer Out rules. Isolated so existing Unit types remain unchanged.
+    function chamferOutValue(block, key, occurrence = 0) {
+      const parameter = manualParameter(block, key, occurrence);
+      return parameter ? contextualValue(parameter).replace(/^&/, "") : "";
+    }
+
+    function parseChamferOutHeader(block) {
+      return {
+        unitName: "CHMF OUT",
+        depth: chamferOutValue(block, "H", 0),
+        intersectionAxis: chamferOutValue(block, "I", 0),
+        intersectionRadius: chamferOutValue(block, "J", 0),
+        chamfer: chamferOutValue(block, "C", 0),
+        raw: block.raw
+      };
+    }
+
+    function parseChamferOutToolRow(block) {
+      const toolNumber = manualParameter(block, "T")?.value ?? null;
+      const priorityInfo = parsedPriority(block);
+      const qCode = manualParameter(block, "Q")?.value ?? null;
+      const fCode = manualParameter(block, "F")?.value ?? null;
+      return {
+        sequenceNumber: Number(block.command.slice(1)),
+        toolNumber,
+        toolName: block.comments[0] || CONTEXTUAL_MAPPING_DICTIONARY.toolCallouts[toolNumber] || "CHAMFER",
+        nominalDiameter: chamferOutValue(block, "D", 0),
+        priority: priorityInfo.rawValue || "",
+        priorityIsLate: priorityInfo.isLate,
+        approachX: chamferOutValue(block, "X", 0),
+        approachY: chamferOutValue(block, "Y", 0),
+        processType: qCode === 7 ? "CW" : "",
+        zfd: fCode === 0 ? "G01" : "",
+        depthZ: "♦",
+        widthR: "",
+        cuttingSpeed: chamferOutValue(block, "I", 0),
+        feedRate: chamferOutValue(block, "J", 0),
+        mCodes: [chamferOutValue(block, "MA"), chamferOutValue(block, "MB"), chamferOutValue(block, "MC")],
+        raw: block.raw
+      };
+    }
+
+    function parseChamferOutGeometryRow(block) {
+      return {
+        sequenceNumber: Number(block.command.slice(1)),
+        pattern: manualParameter(block, "A")?.value === 1 ? "SQR" : "",
+        p1x: chamferOutValue(block, "X", 0),
+        p1y: chamferOutValue(block, "Y", 0),
+        p3x: chamferOutValue(block, "X", 1),
+        p3y: chamferOutValue(block, "Y", 1),
+        corners: ["", "", "", ""],
+        raw: block.raw
+      };
+    }
+
+    function parseLine(raw, context = {}, sourceLine = null) {
+      const block = makeBlock(String(raw ?? ""), sourceLine);
+      const unitToken = block.parameters.find(item => item.key === "U");
+      const unitNumber = unitToken?.value ?? context.unitNumber ?? null;
+      const unitType = resolveUnitType(unitNumber, block.command, context.unitType);
+      block.context = {
+        unitNumber,
+        unitType,
+        sectionCommand: context.sectionCommand || null
+      };
+      block.mappedFields = applyContextualMapping(block, block.context);
+      if (block.tool && !block.tool.name && block.mappedFields["Tool Name"]) {
+        block.tool.name = block.mappedFields["Tool Name"];
+      }
+      if (unitType === "manual" && block.command === "G305") {
+        block.manualHeader = parseManualUnitHeader(block);
+      }
+      if (unitType === "manual" && /^N\d+$/i.test(block.command) && context.sectionCommand === "G420") {
+        block.manualRow = parseManualSequenceRow(block);
+      }
+      if (unitType === "faceMill" && block.command === "G371") {
+        block.faceMillHeader = parseFaceMillHeader(block);
+      }
+      if (unitType === "faceMill" && /^N\d+$/i.test(block.command) && context.sectionCommand === "G424") {
+        block.faceMillToolRow = parseFaceMillToolRow(block);
+      }
+      if (unitType === "faceMill" && /^N\d+$/i.test(block.command) && context.sectionCommand === "G420") {
+        block.faceMillGeometryRow = parseFaceMillGeometryRow(block);
+      }
+      if (unitType === "cborTap" && block.command === "G357") {
+        block.drillTapHeader = parseDrillTapHeader(block);
+      }
+      if (unitType === "cborTap" && /^N\d+$/i.test(block.command) && context.sectionCommand === "G424") {
+        block.drillTapToolRow = parseDrillTapToolRow(block);
+      }
+      if (unitType === "cborTap" && /^N\d+$/i.test(block.command) && context.sectionCommand === "G420") {
+        block.drillTapGeometryRow = parseDrillTapGeometryRow(block);
+      }
+      if (unitType === "circleMill" && block.command === "G356") {
+        block.circleMillHeader = parseCircleMillHeader(block);
+      }
+      if (unitType === "circleMill" && /^N\d+$/i.test(block.command) && context.sectionCommand === "G424") {
+        block.circleMillToolRow = parseCircleMillToolRow(block);
+      }
+      if (unitType === "circleMill" && /^N\d+$/i.test(block.command) && context.sectionCommand === "G420") {
+        block.circleMillGeometryRow = parseCircleMillGeometryRow(block);
+      }
+      if (unitType === "drilling" && block.command === "G350") {
+        block.drillingHeader = parseDrillingHeader(block);
+      }
+      if (unitType === "drilling" && /^N\d+$/i.test(block.command) && context.sectionCommand === "G424") {
+        block.drillingToolRow = parseDrillingToolRow(block);
+      }
+      if (unitType === "drilling" && /^N\d+$/i.test(block.command) && context.sectionCommand === "G420") {
+        block.drillingGeometryRow = parseDrillingGeometryRow(block);
+      }
+      if (unitType === "subProgram" && block.command === "G303") {
+        block.subProgramHeader = parseSubProgramHeader(block);
+      }
+      if (unitType === "endProgram" && block.command === "G301") {
+        block.endProgramHeader = parseEndProgramHeader(block);
+      }
+      if (unitType === "chamferOut" && block.command === "G369") {
+        block.chamferOutHeader = parseChamferOutHeader(block);
+      }
+      if (unitType === "chamferOut" && /^N\d+$/i.test(block.command) && context.sectionCommand === "G424") {
+        block.chamferOutToolRow = parseChamferOutToolRow(block);
+      }
+      if (unitType === "chamferOut" && /^N\d+$/i.test(block.command) && context.sectionCommand === "G420") {
+        block.chamferOutGeometryRow = parseChamferOutGeometryRow(block);
+      }
+      return block;
+    }
+
+    function processFile(text) {
+      const rawText = String(text ?? "");
+      const headerMatch = rawText.match(/(?:^|\s)O(\d+)\s*(?:\(([^)]*)\))?/i);
+      const header = {
+        programNumber: headerMatch ? `O${headerMatch[1]}` : null,
+        comment: headerMatch?.[2]?.trim() || null,
+        raw: headerMatch?.[0]?.trim() || null
+      };
+
+      const lineAt = index => rawText.slice(0, index).split(/\r\n?|\n/).length;
+      const blocks = splitCommandBlocks(rawText);
+      const units = [];
+      const unitByNumber = new Map();
+      const preamble = [];
+      let currentUnit = null;
+      let currentSequence = null;
+      let currentContextCommand = null;
+      let searchFrom = 0;
+
+      blocks.forEach(raw => {
+        const offset = rawText.indexOf(raw, searchFrom);
+        if (offset >= 0) searchFrom = offset + raw.length;
+        const block = parseLine(raw, {
+          unitNumber: currentUnit?.number ?? null,
+          unitType: currentUnit?.type ?? null,
+          sectionCommand: currentContextCommand
+        }, offset >= 0 ? lineAt(offset) : null);
+        const unitToken = block.parameters.find(item => item.key === "U");
+
+        if (unitToken) {
+          const unitNumber = String(unitToken.value);
+          if (!unitByNumber.has(unitNumber)) {
+            const unit = {
+              id: `Unit ${unitNumber}`,
+              number: Number(unitNumber),
+              type: block.context.unitType,
+              manualHeader: block.manualHeader || null,
+              faceMillHeader: block.faceMillHeader || null,
+              drillTapHeader: block.drillTapHeader || null,
+              circleMillHeader: block.circleMillHeader || null,
+              drillingHeader: block.drillingHeader || null,
+              subProgramHeader: block.subProgramHeader || null,
+              chamferOutHeader: block.chamferOutHeader || null,
+              endProgramHeader: block.endProgramHeader || null,
+              name: block.decodedText,
+              priority: null,
+              priorities: [],
+              blocks: [],
+              sequences: [],
+              rawLines: []
+            };
+            units.push(unit);
+            unitByNumber.set(unitNumber, unit);
+          }
+          currentUnit = unitByNumber.get(unitNumber);
+          if (block.manualHeader) currentUnit.manualHeader = block.manualHeader;
+          if (block.faceMillHeader) currentUnit.faceMillHeader = block.faceMillHeader;
+          if (block.drillTapHeader) currentUnit.drillTapHeader = block.drillTapHeader;
+          if (block.circleMillHeader) currentUnit.circleMillHeader = block.circleMillHeader;
+          if (block.drillingHeader) currentUnit.drillingHeader = block.drillingHeader;
+          if (block.subProgramHeader) currentUnit.subProgramHeader = block.subProgramHeader;
+          if (block.chamferOutHeader) currentUnit.chamferOutHeader = block.chamferOutHeader;
+          if (block.endProgramHeader) currentUnit.endProgramHeader = block.endProgramHeader;
+          if (!currentUnit.name && block.decodedText) currentUnit.name = block.decodedText;
+          currentSequence = null;
+          currentContextCommand = block.command;
+        }
+
+        if (/^N\d+$/i.test(block.command)) {
+          if (!currentUnit) {
+            preamble.push(block);
+            return;
+          }
+          currentSequence = {
+            id: block.command,
+            number: Number(block.command.slice(1)),
+            contextCommand: currentContextCommand,
+            manualRow: block.manualRow || null,
+            faceMillToolRow: block.faceMillToolRow || null,
+            faceMillGeometryRow: block.faceMillGeometryRow || null,
+            drillTapToolRow: block.drillTapToolRow || null,
+            drillTapGeometryRow: block.drillTapGeometryRow || null,
+            circleMillToolRow: block.circleMillToolRow || null,
+            circleMillGeometryRow: block.circleMillGeometryRow || null,
+            drillingToolRow: block.drillingToolRow || null,
+            drillingGeometryRow: block.drillingGeometryRow || null,
+            chamferOutToolRow: block.chamferOutToolRow || null,
+            chamferOutGeometryRow: block.chamferOutGeometryRow || null,
+            priority: block.priority,
+            priorityRaw: block.priorityRaw,
+            priorityIsLate: block.priorityIsLate,
+            tool: block.tool,
+            parameters: block.parameters,
+            blocks: [block],
+            rawLines: [block.raw]
+          };
+          currentUnit.sequences.push(currentSequence);
+          currentUnit.rawLines.push(block.raw);
+          return;
+        }
+
+        if (currentSequence && !unitToken) {
+          currentSequence.blocks.push(block);
+          currentSequence.rawLines.push(block.raw);
+          currentUnit.rawLines.push(block.raw);
+          if (currentSequence.priority === null && block.priority !== null) {
+            currentSequence.priority = block.priority;
+            currentSequence.priorityRaw = block.priorityRaw;
+            currentSequence.priorityIsLate = block.priorityIsLate;
+          }
+          if (!currentSequence.tool && block.tool) currentSequence.tool = block.tool;
+        } else if (currentUnit) {
+          currentUnit.blocks.push(block);
+          currentUnit.rawLines.push(block.raw);
+          if (/^G\d{3}$/.test(block.command)) currentContextCommand = block.command;
+        } else {
+          preamble.push(block);
+        }
+      });
+
+      const executionOrder = [];
+      units.forEach(unit => {
+        const prioritySources = [
+          ...unit.blocks.map(block => ({ block, sequence: null })),
+          ...unit.sequences.flatMap(sequence => sequence.blocks.map(block => ({ block, sequence })))
+        ].filter(item => item.block.priority !== null);
+
+        unit.priorities = prioritySources.map(item => ({
+          value: item.block.priority,
+          rawValue: item.block.priorityRaw,
+          isLate: item.block.priorityIsLate,
+          command: item.block.command,
+          sequence: item.sequence?.id || null
+        }));
+        unit.priority = unit.priorities[0]?.value ?? null;
+        prioritySources.forEach(item => executionOrder.push({
+          priority: item.block.priority,
+          priorityRaw: item.block.priorityRaw,
+          priorityIsLate: item.block.priorityIsLate,
+          unit: unit.id,
+          unitNumber: unit.number,
+          sequence: item.sequence?.id || null,
+          command: item.block.command,
+          tool: item.block.tool
+        }));
+      });
+      executionOrder.sort((a, b) => Number(a.priorityIsLate) - Number(b.priorityIsLate) || a.priority - b.priority || a.unitNumber - b.unitNumber);
+
+      return {
+        header,
+        units,
+        preamble,
+        executionOrder,
+        metadata: {
+          unitCount: units.length,
+          sequenceCount: units.reduce((sum, unit) => sum + unit.sequences.length, 0),
+          rawLineCount: rawText ? rawText.split(/\r\n?|\n/).length : 0,
+          parsedBlockCount: preamble.length + units.reduce((sum, unit) =>
+            sum + unit.blocks.length + unit.sequences.reduce((sequenceSum, sequence) => sequenceSum + sequence.blocks.length, 0), 0),
+          unmappedBlockCount: preamble.filter(block => block.commandName === "Unmapped Command").length + units.reduce((sum, unit) =>
+            sum + unit.blocks.filter(block => block.commandName === "Unmapped Command").length +
+            unit.sequences.reduce((sequenceSum, sequence) => sequenceSum + sequence.blocks.filter(block => block.commandName === "Unmapped Command").length, 0), 0)
+        },
+        rawText
+      };
+    }
+
+    function parseMazatrol(text) {
+      return processFile(text);
+    }
+
+    window.parseMazatrol = parseMazatrol;
+    window.processFile = processFile;
+    window.parseLine = parseLine;
+    window.parseManualUnitHeader = parseManualUnitHeader;
+    window.parseManualSequenceRow = parseManualSequenceRow;
+    window.parseFaceMillHeader = parseFaceMillHeader;
+    window.parseFaceMillToolRow = parseFaceMillToolRow;
+    window.parseFaceMillGeometryRow = parseFaceMillGeometryRow;
+    window.parseDrillTapHeader = parseDrillTapHeader;
+    window.parseDrillTapToolRow = parseDrillTapToolRow;
+    window.parseDrillTapGeometryRow = parseDrillTapGeometryRow;
+    window.parseCircleMillHeader = parseCircleMillHeader;
+    window.parseCircleMillToolRow = parseCircleMillToolRow;
+    window.parseCircleMillGeometryRow = parseCircleMillGeometryRow;
+    window.parseDrillingHeader = parseDrillingHeader;
+    window.parseDrillingToolRow = parseDrillingToolRow;
+    window.parseDrillingGeometryRow = parseDrillingGeometryRow;
+    window.parseSubProgramHeader = parseSubProgramHeader;
+    window.parseEndProgramHeader = parseEndProgramHeader;
+    window.parseChamferOutHeader = parseChamferOutHeader;
+    window.parseChamferOutToolRow = parseChamferOutToolRow;
+    window.parseChamferOutGeometryRow = parseChamferOutGeometryRow;
+    window.CONTEXTUAL_MAPPING_DICTIONARY = CONTEXTUAL_MAPPING_DICTIONARY;
+    // ---------- End parser engine ----------
+
+    const source = document.getElementById("source");
+    const viewer = document.getElementById("viewer");
+    const jsonOutput = document.getElementById("jsonOutput");
+    const status = document.getElementById("status");
+    const error = document.getElementById("error");
+    const fileInput = document.getElementById("fileInput");
+    const dropZone = document.getElementById("dropZone");
+    const viewTabs = document.getElementById("viewTabs");
+    const programView = document.getElementById("programView");
+    const programFileTabs = document.getElementById("programFileTabs");
+    const toolsView = document.getElementById("toolsView");
+    const programTabButton = document.getElementById("programTabButton");
+    const toolsTabButton = document.getElementById("toolsTabButton");
+    const toolSummary = document.getElementById("toolSummary");
+    const exportToolUsageButton = document.getElementById("exportToolUsageButton");
+    let currentToolSummary = [];
+
+    const escapeHtml = value => String(value ?? "").replace(/[&<>'"]/g, char => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;"
+    })[char]);
+
+    function parametersFor(block, key) {
+      return block ? block.parameters.filter(item => item.key === key) : [];
+    }
+
+    function field(block, key, occurrence = 0, fallback = "") {
+      const parameter = parametersFor(block, key)[occurrence];
+      return parameter ? contextualValue(parameter) : fallback;
+    }
+
+    function mappedField(block, label, occurrence = 0, fallback = "") {
+      const mapped = block?.mappedFields?.[label];
+      if (mapped === undefined || mapped === null) return fallback;
+      if (Array.isArray(mapped)) return mapped[occurrence] ?? fallback;
+      return occurrence === 0 ? mapped : fallback;
+    }
+
+    function numericField(block, key, occurrence = 0) {
+      return parametersFor(block, key)[occurrence]?.value ?? null;
+    }
+
+    function blockFor(unit, command) {
+      return unit.blocks.find(block => block.command === command) || null;
+    }
+
+    function calloutLocationsForUnit(unit) {
+      const geometrySequences = unit.sequences.filter(sequence => sequence.contextCommand === "G420");
+      const locations = [];
+      geometrySequences.forEach(sequence => {
+        const block = sequence.blocks[0];
+        const faceRow = sequence.faceMillGeometryRow || block.faceMillGeometryRow;
+        const chamferRow = sequence.chamferOutGeometryRow || block.chamferOutGeometryRow;
+        const pointRow = sequence.drillTapGeometryRow || block.drillTapGeometryRow ||
+          sequence.circleMillGeometryRow || block.circleMillGeometryRow ||
+          sequence.drillingGeometryRow || block.drillingGeometryRow;
+        const manualRow = sequence.manualRow || block.manualRow;
+
+        if (faceRow || chamferRow) {
+          const row = faceRow || chamferRow;
+          locations.push({ x: row.p1x, y: row.p1y, source: `FIG ${row.sequenceNumber}` });
+        } else if (pointRow) {
+          locations.push({ x: pointRow.x, y: pointRow.y, source: `FIG ${pointRow.sequenceNumber}` });
+        } else if (manualRow) {
+          const x = manualRow.data.find(item => item.address === "X")?.value || "";
+          const y = manualRow.data.find(item => item.address === "Y")?.value || "";
+          if (x || y) locations.push({ x, y, source: `SNo. ${manualRow.sequenceNumber}` });
+        } else {
+          const fallback = {
+            x: field(block, "X", 0),
+            y: field(block, "Y", 0),
+            source: `FIG ${sequence.number}`
+          };
+          if (fallback.x || fallback.y) locations.push(fallback);
+        }
+      });
+      return locations;
+    }
+
+    function nominalIdentity(value) {
+      const text = String(value || "").trim();
+      if (!text) return "BLANK";
+      const numeric = Number(text);
+      return Number.isFinite(numeric) ? `NUMBER:${numeric}` : `TEXT:${text.toUpperCase()}`;
+    }
+
+    function buildToolSummary(program) {
+      const summaryByTool = new Map();
+      const sourceFileName = program.sourceFileName || "PAM PROGRAM";
+      const programNumber = program.header.programNumber || "UNKNOWN";
+      const addCallout = (unit, tool, sequenceLabel, calloutIndex, unitLocations) => {
+        if (!tool || (!tool.toolName && tool.toolNumber == null)) return;
+        const location = unitLocations[calloutIndex] || unitLocations[0] ||
+          ((tool.approachX || tool.approachY) ? { x: tool.approachX || "", y: tool.approachY || "", source: "APPROACH" } : { x: "", y: "", source: "" });
+        const toolName = String(tool.toolName || "UNMAPPED").toUpperCase();
+        const nominalDiameter = String(tool.nominalDiameter || "");
+        const letterCallout = String(tool.toolFlag || tool.diameterFlag || "").toUpperCase();
+        const key = `${toolName}|${nominalIdentity(nominalDiameter)}|${letterCallout}`;
+        if (!summaryByTool.has(key)) {
+          summaryByTool.set(key, {
+            uniqueToolKey: key,
+            toolName,
+            nominalDiameter,
+            letterCallout,
+            uniqueToolLabel: `${nominalDiameter}${letterCallout}`,
+            toolNumbers: [],
+            unitNumbers: [],
+            unitReferences: [],
+            worksInMultipleUnits: false,
+            calloutCount: 0,
+            callouts: []
+          });
+        }
+        const entry = summaryByTool.get(key);
+        if (tool.toolNumber != null && !entry.toolNumbers.includes(tool.toolNumber)) entry.toolNumbers.push(tool.toolNumber);
+        if (!entry.unitNumbers.includes(unit.number)) entry.unitNumbers.push(unit.number);
+        const unitKey = `${sourceFileName}|${programNumber}|${unit.number}`;
+        if (!entry.unitReferences.some(reference => reference.key === unitKey)) {
+          entry.unitReferences.push({ key: unitKey, fileName: sourceFileName, programNumber, unitNumber: unit.number });
+        }
+        entry.callouts.push({
+          sourceFileName,
+          programNumber,
+          unitNumber: unit.number,
+          unitType: unit.type,
+          sequence: sequenceLabel,
+          toolNumber: tool.toolNumber ?? "",
+          nominalDiameter,
+          letterCallout,
+          priority: tool.priority || "",
+          priorityIsLate: Boolean(tool.priorityIsLate),
+          x: location.x || "",
+          y: location.y || "",
+          locationSource: location.source || ""
+        });
+        entry.calloutCount = entry.callouts.length;
+      };
+
+      program.units.forEach(unit => {
+        const unitLocations = calloutLocationsForUnit(unit);
+        if (unit.type === "manual" && unit.manualHeader) {
+          addCallout(unit, unit.manualHeader, "G305", 0, unitLocations);
+        }
+        unit.sequences.filter(sequence => sequence.contextCommand === "G424").forEach((sequence, calloutIndex) => {
+          const block = sequence.blocks[0];
+          const row = sequence.faceMillToolRow || block.faceMillToolRow ||
+            sequence.drillTapToolRow || block.drillTapToolRow ||
+            sequence.circleMillToolRow || block.circleMillToolRow ||
+            sequence.drillingToolRow || block.drillingToolRow ||
+            sequence.chamferOutToolRow || block.chamferOutToolRow;
+          if (row) {
+            addCallout(unit, row, sequence.id, calloutIndex, unitLocations);
+          } else if (block.tool) {
+            addCallout(unit, {
+              toolNumber: block.tool.number,
+              toolName: block.tool.name || `TOOL ${block.tool.number ?? ""}`,
+              nominalDiameter: block.tool.nominalDiameterRaw,
+              approachX: field(block, "X", 0),
+              approachY: field(block, "Y", 0),
+              priority: block.priorityRaw,
+              priorityIsLate: block.priorityIsLate
+            }, sequence.id, calloutIndex, unitLocations);
+          }
+        });
+      });
+      return [...summaryByTool.values()].map(entry => {
+        entry.unitNumbers.sort((a, b) => a - b);
+        entry.toolNumbers.sort((a, b) => a - b);
+        entry.unitReferences.sort((a, b) => a.fileName.localeCompare(b.fileName) || a.unitNumber - b.unitNumber);
+        entry.worksInMultipleUnits = entry.unitReferences.length > 1;
+        entry.callouts.sort((a, b) => a.sourceFileName.localeCompare(b.sourceFileName) || a.unitNumber - b.unitNumber || String(a.sequence).localeCompare(String(b.sequence), undefined, { numeric: true }));
+        return entry;
+      }).sort((a, b) => a.toolName.localeCompare(b.toolName) || nominalIdentity(a.nominalDiameter).localeCompare(nominalIdentity(b.nominalDiameter), undefined, { numeric: true }) || a.letterCallout.localeCompare(b.letterCallout));
+    }
+
+    function combineToolSummaries(summaries) {
+      const combined = new Map();
+      summaries.flat().forEach(entry => {
+        if (!combined.has(entry.uniqueToolKey)) {
+          combined.set(entry.uniqueToolKey, {
+            ...entry,
+            toolNumbers: [],
+            unitNumbers: [],
+            unitReferences: [],
+            callouts: []
+          });
+        }
+        const target = combined.get(entry.uniqueToolKey);
+        entry.toolNumbers.forEach(number => { if (!target.toolNumbers.includes(number)) target.toolNumbers.push(number); });
+        entry.unitNumbers.forEach(number => { if (!target.unitNumbers.includes(number)) target.unitNumbers.push(number); });
+        entry.unitReferences.forEach(reference => {
+          if (!target.unitReferences.some(item => item.key === reference.key)) target.unitReferences.push(reference);
+        });
+        target.callouts.push(...entry.callouts);
+      });
+      return [...combined.values()].map(entry => {
+        entry.toolNumbers.sort((a, b) => a - b);
+        entry.unitNumbers.sort((a, b) => a - b);
+        entry.unitReferences.sort((a, b) => a.fileName.localeCompare(b.fileName) || a.unitNumber - b.unitNumber);
+        entry.callouts.sort((a, b) => a.sourceFileName.localeCompare(b.sourceFileName) || a.unitNumber - b.unitNumber || String(a.sequence).localeCompare(String(b.sequence), undefined, { numeric: true }));
+        entry.calloutCount = entry.callouts.length;
+        entry.worksInMultipleUnits = entry.unitReferences.length > 1;
+        return entry;
+      }).sort((a, b) => a.toolName.localeCompare(b.toolName) || nominalIdentity(a.nominalDiameter).localeCompare(nominalIdentity(b.nominalDiameter), undefined, { numeric: true }) || a.letterCallout.localeCompare(b.letterCallout));
+    }
+
+    function renderToolSummary(entries) {
+      currentToolSummary = entries;
+      exportToolUsageButton.disabled = entries.length === 0;
+      if (!entries.length) {
+        toolSummary.innerHTML = '<div class="tool-summary-empty">NO TOOL CALLS FOUND IN THIS PROGRAM</div>';
+        return;
+      }
+      toolSummary.innerHTML = entries.map(entry => {
+        const toolCallout = `${entry.uniqueToolLabel || "NO NOM-Ø"} ${entry.toolName}`.trim();
+        const calloutRows = entry.callouts.map(callout => `<tr>
+          <td>${escapeHtml(callout.sourceFileName)}</td>
+          <td>${escapeHtml(callout.programNumber)}</td>
+          <td class="summary-unit">Unit ${escapeHtml(callout.unitNumber)}</td>
+          <td class="summary-tool">${escapeHtml(toolCallout)}</td>
+          <td>${escapeHtml(callout.nominalDiameter || "—")}</td>
+          <td class="summary-unit">${escapeHtml(callout.letterCallout || "—")}</td>
+          <td class="${callout.priorityIsLate ? "magenta" : "priority"}">${escapeHtml(callout.priority || "—")}</td>
+          <td class="summary-location">${escapeHtml(callout.x || "—")}</td>
+          <td class="summary-location">${escapeHtml(callout.y || "—")}</td>
+        </tr>`).join("");
+        return `<details class="tool-card" open>
+          <summary class="tool-card-head">
+            <span class="tool-collapse-indicator" aria-hidden="true">▼</span>
+            <div class="tool-card-number">${escapeHtml(entry.uniqueToolLabel || "NO NOM-Ø")} ${escapeHtml(entry.toolName)}</div>
+            <div class="tool-units">${entry.unitReferences.map(reference => `${escapeHtml(reference.fileName)} · U${escapeHtml(reference.unitNumber)}`).join(" · ")}</div>
+            <div class="${entry.worksInMultipleUnits ? "multi-unit-badge" : "single-unit-badge"}">${entry.worksInMultipleUnits ? "MULTIPLE UNITS" : "ONE UNIT"} · ${entry.calloutCount} CALLOUT${entry.calloutCount === 1 ? "" : "S"}</div>
+          </summary>
+          <div class="tool-summary-wrap"><table class="tool-summary-table tool-callout-table">
+            <thead><tr><th>PAM FILE</th><th>PROGRAM</th><th>UNIT</th><th>CALLOUT</th><th>NOM-Ø</th><th>LETTER</th><th>PRIORITY</th><th>X LOCATION</th><th>Y LOCATION</th></tr></thead>
+            <tbody>${calloutRows}</tbody>
+          </table></div>
+        </details>`;
+      }).join("");
+    }
+
+    function escapeExcelXml(value) {
+      return String(value ?? "").replace(/[&<>"']/g, character => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;"
+      })[character]);
+    }
+
+    function exportToolUsageToExcel() {
+      if (!currentToolSummary.length) return;
+      const headers = ["PAM FILE", "PROGRAM", "UNIT", "CALLOUT", "NOM-Ø", "LETTER", "PRIORITY", "X LOCATION", "Y LOCATION"];
+      const rows = currentToolSummary.flatMap(entry => {
+        const toolCallout = `${entry.uniqueToolLabel || "NO NOM-Ø"} ${entry.toolName}`.trim();
+        return entry.callouts.map(callout => [
+          callout.sourceFileName,
+          callout.programNumber,
+          `Unit ${callout.unitNumber}`,
+          toolCallout,
+          callout.nominalDiameter || "",
+          callout.letterCallout || "",
+          callout.priority || "",
+          callout.x || "",
+          callout.y || ""
+        ]);
+      });
+      const excelRow = (values, style = "Data") => `<Row>${values.map(value => `<Cell ss:StyleID="${style}"><Data ss:Type="String">${escapeExcelXml(value)}</Data></Cell>`).join("")}</Row>`;
+      const workbook = `<?xml version="1.0"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:o="urn:schemas-microsoft-com:office:office"
+ xmlns:x="urn:schemas-microsoft-com:office:excel"
+ xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+ <Styles>
+  <Style ss:ID="Default" ss:Name="Normal"><Alignment ss:Vertical="Center"/><Font ss:FontName="Consolas" ss:Size="10"/></Style>
+  <Style ss:ID="Header"><Alignment ss:Horizontal="Center"/><Font ss:Bold="1"/><Interior ss:Color="#4F81E1" ss:Pattern="Solid"/></Style>
+  <Style ss:ID="Data"><Alignment ss:Horizontal="Center"/></Style>
+ </Styles>
+ <Worksheet ss:Name="Tool Usage"><Table>
+  <Column ss:Width="150"/><Column ss:Width="75"/><Column ss:Width="70"/><Column ss:Width="145"/><Column ss:Width="75"/><Column ss:Width="65"/><Column ss:Width="75"/><Column ss:Width="90"/><Column ss:Width="90"/>
+  ${excelRow(headers, "Header")}
+  ${rows.map(row => excelRow(row)).join("\n  ")}
+ </Table><WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel"><FreezePanes/><FrozenNoSplit/><SplitHorizontal>1</SplitHorizontal><TopRowBottomPane>1</TopRowBottomPane><ActivePane>2</ActivePane></WorksheetOptions></Worksheet>
+</Workbook>`;
+      const blob = new Blob([workbook], { type: "application/vnd.ms-excel;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "mazatrol-tool-usage.xls";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    exportToolUsageButton.addEventListener("click", exportToolUsageToExcel);
+    window.exportToolUsageToExcel = exportToolUsageToExcel;
+
+    window.buildToolSummary = buildToolSummary;
+
+    function activateView(viewName) {
+      const showTools = viewName === "tools";
+      programView.hidden = showTools;
+      toolsView.hidden = !showTools;
+      programTabButton.classList.toggle("active", !showTools);
+      toolsTabButton.classList.toggle("active", showTools);
+    }
+
+    programTabButton.addEventListener("click", () => activateView("program"));
+    toolsTabButton.addEventListener("click", () => activateView("tools"));
+    window.activateView = activateView;
+
+    function mzCell(value, className = "", title = "") {
+      return { value: value ?? "", className, title };
+    }
+
+    function renderMzTable(headers, rows, headClass) {
+      const head = headers.map(header => `<th class="${escapeHtml(header.className || "")}"${header.colspan ? ` colspan="${header.colspan}"` : ""}>${escapeHtml(header.label)}</th>`).join("");
+      const body = rows.map(row => `<tr>${row.map(cell => `<td class="${escapeHtml(cell.className || "")}"${cell.colspan ? ` colspan="${cell.colspan}"` : ""}${cell.title ? ` title="${escapeHtml(cell.title)}"` : ""}>${escapeHtml(cell.value)}</td>`).join("")}</tr>`).join("");
+      return `<table class="mz-table"><thead><tr class="${headClass}">${head}</tr></thead><tbody>${body}</tbody></table>`;
+    }
+
+    function operationToolName(sequence, operationFamily) {
+      const block = sequence.blocks[0];
+      const mappedName = mappedField(block, "Tool Name");
+      if (mappedName) return String(mappedName).toUpperCase();
+      if (block.tool?.name) return block.tool.name.toUpperCase();
+      if (operationFamily === "faceMill") return "FCE MILL";
+      return numericField(block, "T") === 5 ? "TAP" : "DRILL";
+    }
+
+    function toolFlag(block) {
+      if (numericField(block, "T") === 5) return "P";
+      const speedMode = numericField(block, "S");
+      return ({ 23: "Y", 24: "Z", 3: "C" })[speedMode] || "";
+    }
+
+    function renderInitialSetup(unit) {
+      const setup = blockFor(unit, "G300") || unit.blocks[0];
+      const headers = ["Unit No.", "MAT.", "INITIAL-Z", "ATC MODE", "MULTI MODE", "MULTI FLAG", "PITCH-X", "PITCH-Y", "DIS."].map(label => ({ label }));
+      const row = [
+        mzCell(unit.number, "row-no"), mzCell(mappedField(setup, "MAT", 0, unit.name || setup?.decodedText || "MATERIAL"), "op"),
+        mzCell(mappedField(setup, "INITIAL-Z", 0, "0.")), mzCell(field(setup, "A", 0, "0")),
+        mzCell(numericField(setup, "B") === 1 ? "OFF" : field(setup, "B", 0, "OFF"), "green"),
+        mzCell("♦", "diamond"), mzCell("♦", "diamond"), mzCell("♦", "diamond"), mzCell(field(setup, "G", 0, "0"))
+      ];
+      return `<section class="mz-unit">${renderMzTable(headers, [row], "unit-head")}</section>`;
+    }
+
+    function renderOffsetUnit(unit) {
+      const offset = blockFor(unit, "G380") || unit.blocks[0];
+      const headers = ["Unit No.", "UNIT", "U(X)", "V(Y)", "D(th)", "W(Z)"].map(label => ({ label }));
+      const row = [mzCell(unit.number, "row-no"), mzCell("OFFSET", "op"), mzCell(mappedField(offset, "U(X)", 0, "0.")), mzCell(mappedField(offset, "V(Y)", 0, "0.")), mzCell(mappedField(offset, "D(th)", 0, "0.")), mzCell(mappedField(offset, "W(Z)", 0, "0."))];
+      return `<section class="mz-unit">${renderMzTable(headers, [row], "unit-head")}</section>`;
+    }
+
+    function renderFaceMillTools(unit) {
+      const sequences = unit.sequences.filter(sequence => sequence.contextCommand === "G424");
+      if (!sequences.length) return "";
+      const headers = ["SNo.", "TOOL", "NOM-Ø", "", "No.", "APRCH-X", "APRCH-Y", "TYPE", "ZFD", "DEP-Z", "WID-R", "C-SP", "FR", "M", "M", "M"].map(label => ({ label }));
+      const rows = sequences.map(sequence => {
+        const block = sequence.blocks[0];
+        const row = sequence.faceMillToolRow || block.faceMillToolRow || parseFaceMillToolRow(block);
+        return [
+          mzCell(`R ${row.sequenceNumber}`, "row-no"),
+          mzCell(row.toolName, "op", `Tool No. ${row.toolNumber ?? ""}`),
+          mzCell(row.nominalDiameter), mzCell(row.diameterFlag, "red"),
+          mzCell(row.priority, row.priorityIsLate ? "magenta" : "priority", "Execution priority"),
+          mzCell(row.approachX, "yellow"), mzCell(row.approachY, "yellow"), mzCell(row.processType, "left"),
+          mzCell(row.zfd, "diamond"), mzCell(row.depthZ), mzCell(row.widthR),
+          mzCell(row.cuttingSpeed), mzCell(row.feedRate), ...row.mCodes.map(code => mzCell(code))
+        ];
+      });
+      return renderMzTable(headers, rows, "tool-head");
+    }
+
+    function renderGeometry(unit, mode) {
+      const sequences = unit.sequences.filter(sequence => sequence.contextCommand === "G420");
+      if (!sequences.length) return "";
+      if (mode === "face") {
+        const headers = ["FIG", "PTN", "P1X/CX", "P1Y/CY", "P3X/R", "P3Y", "CN1", "CN2", "CN3", "CN4"].map(label => ({ label }));
+        const rows = sequences.map(sequence => {
+          const block = sequence.blocks[0];
+          const row = sequence.faceMillGeometryRow || block.faceMillGeometryRow || parseFaceMillGeometryRow(block);
+          return [mzCell(row.sequenceNumber, "row-no"), mzCell(row.pattern, "op"), mzCell(row.p1x), mzCell(row.p1y), mzCell(row.p3x), mzCell(row.p3y), ...row.corners.map(value => mzCell(value))];
+        });
+        return renderMzTable(headers, rows, "fig-head");
+      }
+      const headers = ["FIG", "PTN", "Z", "X", "Y", "AN1", "AN2", "T1", "T2", "F", "M", "N", "P", "Q", "R"].map(label => ({ label }));
+      const rows = sequences.map(sequence => {
+        const block = sequence.blocks[0];
+        const row = sequence.drillTapGeometryRow || block.drillTapGeometryRow || parseDrillTapGeometryRow(block);
+        return [mzCell(row.sequenceNumber, "row-no"), mzCell(row.pattern, "op"), mzCell(row.z), mzCell(row.x), mzCell(row.y), ...row.indicators.map(value => mzCell(value, "diamond")), mzCell(row.p), mzCell(row.q), mzCell(row.r)];
+      });
+      return renderMzTable(headers, rows, "fig-head");
+    }
+
+    function renderFaceMillUnit(unit) {
+      const cycle = blockFor(unit, "G371") || unit.blocks[0];
+      const faceHeader = unit.faceMillHeader || cycle?.faceMillHeader || parseFaceMillHeader(cycle);
+      const headers = ["Unit No.", "UNIT", "", "DEPTH", "SRV-Z", "BTM", "FIN-Z"].map(label => ({ label }));
+      const row = [mzCell(unit.number, "row-no"), mzCell(faceHeader.unitName, "op"), mzCell(""), mzCell(faceHeader.depth), mzCell(faceHeader.serviceZ), mzCell(faceHeader.bottom), mzCell(faceHeader.finishZ)];
+      return `<section class="mz-unit">${renderMzTable(headers, [row], "unit-head")}${renderFaceMillTools(unit)}${renderGeometry(unit, "face")}</section>`;
+    }
+
+    function renderDrillTools(unit) {
+      const sequences = unit.sequences.filter(sequence => sequence.contextCommand === "G424");
+      if (!sequences.length) return "";
+      const headers = ["SNo.", "TOOL", "NOM-Ø", "", "No.", "HOLE-Ø", "HOLE-DEP", "PRE-DIA", "PRE-DEP", "RGH", "DEPTH", "PK-DEP", "C-SP", "FR", "M", "M", "M"].map(label => ({ label }));
+      const rows = sequences.map(sequence => {
+        const block = sequence.blocks[0];
+        const row = sequence.drillTapToolRow || block.drillTapToolRow || parseDrillTapToolRow(block);
+        const roughClass = row.rough === "PCK2" ? "magenta" : "op";
+        return [
+          mzCell(row.sequenceNumber, "row-no"), mzCell(row.toolName, "op", `Tool No. ${row.toolNumber ?? ""}`),
+          mzCell(row.nominalDiameter, row.toolName === "TAP" ? "op" : ""), mzCell(row.toolFlag, "green"), mzCell(row.priority, row.priorityIsLate ? "magenta" : "priority", "Execution priority"),
+          mzCell(row.holeDiameter), mzCell(row.holeDepth), mzCell(row.preDiameter), mzCell(row.preDepth),
+          mzCell(row.rough, roughClass), mzCell(`${row.depthAddress} ${row.depth}`, "left"), mzCell(row.peckDepth, "diamond"),
+          mzCell(row.cuttingSpeed), mzCell(row.feedRate), ...row.mCodes.map(code => mzCell(code))
+        ];
+      });
+      return renderMzTable(headers, rows, "tool-head");
+    }
+
+    function renderDrillTapUnit(unit) {
+      const cycle = blockFor(unit, "G357") || unit.blocks[0];
+      const drillHeader = unit.drillTapHeader || cycle?.drillTapHeader || parseDrillTapHeader(cycle);
+      const headers = ["Unit No.", "UNIT", "", "NOM-Ø", "MAJOR-Ø", "PITCH", "TAP-DEP", "CHMF", "CB-DIA", "CB-DEP", "CHMF", "BTM", "CHP"].map(label => ({ label }));
+      const row = [mzCell(unit.number, "row-no"), mzCell(drillHeader.unitName, "op"), mzCell(""), mzCell(drillHeader.nominalDiameter, "op"), mzCell(drillHeader.majorDiameter), mzCell(drillHeader.pitch), mzCell(drillHeader.tapDepth), mzCell(drillHeader.chamfer), mzCell(drillHeader.counterboreDiameter), mzCell(drillHeader.counterboreDepth), mzCell(drillHeader.counterboreChamfer), mzCell(drillHeader.bottom), mzCell(drillHeader.chip)];
+      return `<section class="mz-unit">${renderMzTable(headers, [row], "unit-head")}${renderDrillTools(unit)}${renderGeometry(unit, "drill")}</section>`;
+    }
+
+    function renderCircleMillTools(unit) {
+      const sequences = unit.sequences.filter(sequence => sequence.contextCommand === "G424");
+      if (!sequences.length) return "";
+      const headers = ["SNo.", "TOOL", "NOM-Ø", "", "No.", "HOLE-Ø", "HOLE-DEP", "PRE-DIA", "PRE-DEP", "RGH", "DEPTH", "PK-DEP", "C-SP", "FR", "M", "M", "M"].map(label => ({ label }));
+      const rows = sequences.map(sequence => {
+        const block = sequence.blocks[0];
+        const row = sequence.circleMillToolRow || block.circleMillToolRow || parseCircleMillToolRow(block);
+        return [
+          mzCell(row.sequenceNumber, "row-no"), mzCell(row.toolName, "op", `Tool No. ${row.toolNumber ?? ""}`),
+          mzCell(row.nominalDiameter), mzCell(row.toolFlag), mzCell(row.priority, row.priorityIsLate ? "magenta" : "priority", "Execution priority"),
+          mzCell(row.holeDiameter), mzCell(row.holeDepth), mzCell(row.preDiameter, "diamond"), mzCell(row.preDepth, row.preDepth === "CCW" ? "magenta" : ""),
+          mzCell(row.rough), mzCell(`${row.depthAddress}${row.depth}`, "op left"), mzCell(row.peckDepth, "diamond"),
+          mzCell(row.cuttingSpeed), mzCell(row.feedRate), ...row.mCodes.map(code => mzCell(code))
+        ];
+      });
+      return renderMzTable(headers, rows, "tool-head");
+    }
+
+    function renderCircleMillGeometry(unit) {
+      const sequences = unit.sequences.filter(sequence => sequence.contextCommand === "G420");
+      if (!sequences.length) return "";
+      const headers = ["FIG", "PTN", "Z", "X", "Y", "AN1", "AN2", "T1", "T2", "F", "M", "N", "P", "Q", "R"].map(label => ({ label }));
+      const rows = sequences.map(sequence => {
+        const block = sequence.blocks[0];
+        const row = sequence.circleMillGeometryRow || block.circleMillGeometryRow || parseCircleMillGeometryRow(block);
+        return [mzCell(row.sequenceNumber, "row-no"), mzCell(row.pattern, "op"), mzCell(row.z), mzCell(row.x), mzCell(row.y), ...row.indicators.map(value => mzCell(value, "diamond")), mzCell(row.p), mzCell(row.q), mzCell(row.r)];
+      });
+      return renderMzTable(headers, rows, "fig-head");
+    }
+
+    function renderCircleMillUnit(unit) {
+      const cycle = blockFor(unit, "G356") || unit.blocks[0];
+      const header = unit.circleMillHeader || cycle?.circleMillHeader || parseCircleMillHeader(cycle);
+      const headers = ["Unit No.", "UNIT", "", "TORNAD", "DIA", "DEPTH", "CHMF", "BTM", "PRE-DIA", "CHMF", "PITCH1", "PITCH2"].map(label => ({ label }));
+      const row = [
+        mzCell(unit.number, "row-no"), mzCell(header.unitName, "op"), mzCell(""), mzCell(header.tornado),
+        mzCell(header.diameter), mzCell(header.depth), mzCell(header.chamfer), mzCell(header.bottom),
+        mzCell(header.preDiameter, "diamond"), mzCell(header.preChamfer, "diamond"), mzCell(header.pitch1), mzCell(header.pitch2)
+      ];
+      return `<section class="mz-unit">${renderMzTable(headers, [row], "unit-head")}${renderCircleMillTools(unit)}${renderCircleMillGeometry(unit)}</section>`;
+    }
+
+    function renderDrillingTools(unit) {
+      const sequences = unit.sequences.filter(sequence => sequence.contextCommand === "G424");
+      if (!sequences.length) return "";
+      const headers = ["SNo.", "TOOL", "NOM-Ø", "", "No.", "HOLE-Ø", "HOLE-DEP", "PRE-DIA", "PRE-DEP", "RGH", "DEPTH", "PK-DEP", "C-SP", "FR", "M", "M", "M"].map(label => ({ label }));
+      const rows = sequences.map(sequence => {
+        const block = sequence.blocks[0];
+        const row = sequence.drillingToolRow || block.drillingToolRow || parseDrillingToolRow(block);
+        return [
+          mzCell(row.sequenceNumber, "row-no"), mzCell(row.toolName, "op", `Tool No. ${row.toolNumber ?? ""}`),
+          mzCell(row.nominalDiameter), mzCell(row.toolFlag, "green"), mzCell(row.priority, row.priorityIsLate ? "magenta" : "priority", "Execution priority"),
+          mzCell(row.holeDiameter), mzCell(row.holeDepth), mzCell(row.preDiameter), mzCell(row.preDepth),
+          mzCell(row.rough, row.rough === "PCK2" ? "magenta" : "op"), mzCell(`${row.depthAddress} ${row.depth}`, "left"), mzCell(row.peckDepth, "diamond"),
+          mzCell(row.cuttingSpeed), mzCell(row.feedRate), ...row.mCodes.map(code => mzCell(code))
+        ];
+      });
+      return renderMzTable(headers, rows, "tool-head");
+    }
+
+    function renderDrillingGeometry(unit) {
+      const sequences = unit.sequences.filter(sequence => sequence.contextCommand === "G420");
+      if (!sequences.length) return "";
+      const headers = ["FIG", "PTN", "Z", "X", "Y", "AN1", "AN2", "T1", "T2", "F", "M", "N", "P", "Q", "R"].map(label => ({ label }));
+      const rows = sequences.map(sequence => {
+        const block = sequence.blocks[0];
+        const row = sequence.drillingGeometryRow || block.drillingGeometryRow || parseDrillingGeometryRow(block);
+        return [mzCell(row.sequenceNumber, "row-no"), mzCell(row.pattern, "op"), mzCell(row.z), mzCell(row.x), mzCell(row.y), ...row.indicators.map(value => mzCell(value, "diamond")), mzCell(row.p), mzCell(row.q), mzCell(row.r)];
+      });
+      return renderMzTable(headers, rows, "fig-head");
+    }
+
+    function renderDrillingUnit(unit) {
+      const cycle = blockFor(unit, "G350") || unit.blocks[0];
+      const header = unit.drillingHeader || cycle?.drillingHeader || parseDrillingHeader(cycle);
+      const headers = ["Unit No.", "UNIT", "", "DIA", "DEPTH", "CHMF"].map(label => ({ label }));
+      const row = [mzCell(unit.number, "row-no"), mzCell(header.unitName, "op"), mzCell(""), mzCell(header.diameter), mzCell(header.depth), mzCell(header.chamfer)];
+      return `<section class="mz-unit">${renderMzTable(headers, [row], "unit-head")}${renderDrillingTools(unit)}${renderDrillingGeometry(unit)}</section>`;
+    }
+
+    function renderSubProgramUnit(unit) {
+      const block = blockFor(unit, "G303") || unit.blocks[0];
+      const header = unit.subProgramHeader || block?.subProgramHeader || parseSubProgramHeader(block);
+      const headers = [
+        { label: "Unit No." }, { label: "UNIT" }, { label: "WORK No.", colspan: 2 },
+        { label: "$" }, { label: "REPEAT" }, { label: "No." }, { label: "" }
+      ];
+      const row = [
+        mzCell(unit.number, "row-no"), mzCell(header.unitName, "op"),
+        mzCell(header.workNumber, "left"), mzCell(header.workSuffix, "red left"),
+        mzCell(header.dollarIndicator, "diamond"), mzCell(header.repeat), mzCell(header.number), mzCell("")
+      ];
+      return `<section class="mz-unit">${renderMzTable(headers, [row], "unit-head")}</section>`;
+    }
+
+    function renderEndProgramUnit(unit) {
+      const block = blockFor(unit, "G301") || unit.blocks[0];
+      const header = unit.endProgramHeader || block?.endProgramHeader || parseEndProgramHeader(block);
+      const headers = ["Unit No.", "UNIT", "CONTI.", "NUMBER", "ATC", "ANGLE", "DIR.", "RETURN", "", "WORK No.", "EXECUTE"].map(label => ({ label }));
+      const row = [
+        mzCell(unit.number, "row-no"), mzCell(header.unitName, "op"), mzCell(header.continuous), mzCell(header.number),
+        mzCell(header.atc), mzCell(header.angle), mzCell(header.direction), mzCell(header.returnMode), mzCell(""),
+        mzCell(header.workNumber, "diamond"), mzCell(header.execute, "diamond")
+      ];
+      return `<section class="mz-unit">${renderMzTable(headers, [row], "unit-head")}</section>`;
+    }
+
+    function renderChamferOutTools(unit) {
+      const sequences = unit.sequences.filter(sequence => sequence.contextCommand === "G424");
+      if (!sequences.length) return "";
+      const headers = ["SNo.", "TOOL", "NOM-Ø", "", "No.", "APRCH-X", "APRCH-Y", "TYPE", "ZFD", "DEP-Z", "WID-R", "C-SP", "FR", "M", "M", "M"].map(label => ({ label }));
+      const rows = sequences.map(sequence => {
+        const block = sequence.blocks[0];
+        const row = sequence.chamferOutToolRow || block.chamferOutToolRow || parseChamferOutToolRow(block);
+        return [
+          mzCell(row.sequenceNumber, "row-no"), mzCell(row.toolName, "op", `Tool No. ${row.toolNumber ?? ""}`),
+          mzCell(row.nominalDiameter), mzCell(""), mzCell(row.priority, row.priorityIsLate ? "magenta" : "priority", "Execution priority"),
+          mzCell(row.approachX, "yellow"), mzCell(row.approachY, "yellow"), mzCell(row.processType, "left"),
+          mzCell(row.zfd, "green left"), mzCell(row.depthZ, "diamond"), mzCell(row.widthR),
+          mzCell(row.cuttingSpeed), mzCell(row.feedRate), ...row.mCodes.map(code => mzCell(code))
+        ];
+      });
+      return renderMzTable(headers, rows, "tool-head");
+    }
+
+    function renderChamferOutGeometry(unit) {
+      const sequences = unit.sequences.filter(sequence => sequence.contextCommand === "G420");
+      if (!sequences.length) return "";
+      const headers = ["FIG", "PTN", "P1X/CX", "P1Y/CY", "P3X/R", "P3Y", "CN1", "CN2", "CN3", "CN4"].map(label => ({ label }));
+      const rows = sequences.map(sequence => {
+        const block = sequence.blocks[0];
+        const row = sequence.chamferOutGeometryRow || block.chamferOutGeometryRow || parseChamferOutGeometryRow(block);
+        return [mzCell(row.sequenceNumber, "row-no"), mzCell(row.pattern, "op"), mzCell(row.p1x), mzCell(row.p1y), mzCell(row.p3x), mzCell(row.p3y), ...row.corners.map(value => mzCell(value))];
+      });
+      return renderMzTable(headers, rows, "fig-head");
+    }
+
+    function renderChamferOutUnit(unit) {
+      const cycle = blockFor(unit, "G369") || unit.blocks[0];
+      const header = unit.chamferOutHeader || cycle?.chamferOutHeader || parseChamferOutHeader(cycle);
+      const headers = ["Unit No.", "UNIT", "", "DEPTH", "INTER-AX", "INTER-R", "CHMF"].map(label => ({ label }));
+      const row = [mzCell(unit.number, "row-no"), mzCell(header.unitName, "op"), mzCell(""), mzCell(header.depth), mzCell(header.intersectionAxis), mzCell(header.intersectionRadius), mzCell(header.chamfer)];
+      return `<section class="mz-unit">${renderMzTable(headers, [row], "unit-head")}${renderChamferOutTools(unit)}${renderChamferOutGeometry(unit)}</section>`;
+    }
+
+    function renderManualUnit(unit) {
+      const setup = blockFor(unit, "G305") || unit.blocks[0];
+      const manualHeader = unit.manualHeader || setup?.manualHeader || parseManualUnitHeader(setup);
+      const shapeSequences = unit.sequences.filter(sequence => sequence.contextCommand === "G420");
+      const unitHeaders = ["Unit No.", "UNIT", "TOOL", "NOM-Ø", "", "No.", ""].map(label => ({ label }));
+      const unitRow = [
+        mzCell(unit.number, "row-no"),
+        mzCell(manualHeader.unitName, "op"),
+        mzCell(manualHeader.toolName, "op"),
+        mzCell(manualHeader.nominalDiameter),
+        mzCell(manualHeader.toolFlag, "green"),
+        mzCell(manualHeader.priority, manualHeader.priorityIsLate ? "magenta" : "priority", "Execution priority"),
+        mzCell("")
+      ];
+
+      const shapeHeaders = [
+        { label: "SNo." }, { label: "G1" }, { label: "G2" },
+        { label: "DATA 1", colspan: 2 }, { label: "DATA 2", colspan: 2 },
+        { label: "DATA 3", colspan: 2 }, { label: "DATA 4", colspan: 2 },
+        { label: "DATA 5", colspan: 2 }, { label: "DATA 6", colspan: 2 },
+        { label: "S" }, { label: "M/B" }
+      ];
+      const shapeRows = shapeSequences.map(sequence => {
+        const block = sequence.blocks[0];
+        const manualRow = sequence.manualRow || block.manualRow || parseManualSequenceRow(block);
+        const dataCells = manualRow.data.flatMap(item => item.address
+          ? [mzCell(item.address, "yellow manual-address"), mzCell(item.value, item.address === "F" ? "yellow manual-data-value" : "manual-data-value")]
+          : [mzCell(""), mzCell("")]);
+        return [
+          mzCell(manualRow.sequenceNumber, "row-no"),
+          mzCell(manualRow.g1),
+          mzCell(manualRow.g2),
+          ...dataCells,
+          mzCell(manualRow.spindle),
+          mzCell(manualRow.mCode ? `${manualRow.mCode.address} ${manualRow.mCode.value}` : "", manualRow.mCode ? "green left" : "")
+        ];
+      });
+      const rows = shapeRows.length ? shapeRows : [[mzCell("", "row-no"), mzCell(""), mzCell(""), ...Array.from({ length: 12 }, () => mzCell("")), mzCell(""), mzCell("")]];
+      return `<section class="mz-unit manual-unit">${renderMzTable(unitHeaders, [unitRow], "unit-head")}${renderMzTable(shapeHeaders, rows, "fig-head")}</section>`;
+    }
+
+    function renderGenericUnit(unit) {
+      const headers = [{ label: "Unit No." }, { label: "COMMAND" }, { label: "TYPE" }, { label: "PARAMETERS / PRESERVED DATA" }];
+      const items = [
+        ...unit.blocks.map(block => ({ block, sequence: null })),
+        ...unit.sequences.flatMap(sequence => sequence.blocks.map(block => ({ block, sequence })))
+      ];
+      const rows = items.map((item, index) => [
+        mzCell(index === 0 ? unit.number : "", "row-no"),
+        mzCell(item.block.command, "green"),
+        mzCell(item.sequence ? `${item.block.commandName} · ${item.sequence.contextCommand}` : item.block.commandName, "left"),
+        mzCell(item.block.raw, "left")
+      ]);
+      return `<section class="mz-unit">${renderMzTable(headers, rows.length ? rows : [[mzCell(unit.number, "row-no"), mzCell("RAW"), mzCell("EMPTY UNIT"), mzCell("")]], "unit-head")}${renderPreservedUnit(unit)}</section>`;
+    }
+
+    function renderPreservedUnit(unit) {
+      return `<details class="mz-preserved"><summary>FULL PRESERVED SOURCE · ${escapeHtml(unit.id)} · ${unit.rawLines.length} BLOCKS</summary><pre>${escapeHtml(unit.rawLines.join("\n"))}</pre></details>`;
+    }
+
+    function classifyUnit(unit) {
+      if (blockFor(unit, "G301")) return "endProgram";
+      if (blockFor(unit, "G303")) return "subProgram";
+      if (blockFor(unit, "G305")) return "manual";
+      if (blockFor(unit, "G300")) return "initialSetup";
+      if (blockFor(unit, "G380")) return "offset";
+      if (blockFor(unit, "G371")) return "faceMill";
+      if (blockFor(unit, "G350")) return "drilling";
+      if (blockFor(unit, "G356")) return "circleMill";
+      if (blockFor(unit, "G369")) return "chamferOut";
+      if (blockFor(unit, "G357")) return "drillTap";
+      return "generic";
+    }
+
+    function renderProgramMarkup(program) {
+      const unitRenderers = {
+        endProgram: renderEndProgramUnit,
+        subProgram: renderSubProgramUnit,
+        manual: renderManualUnit,
+        initialSetup: renderInitialSetup,
+        offset: renderOffsetUnit,
+        faceMill: renderFaceMillUnit,
+        drilling: renderDrillingUnit,
+        circleMill: renderCircleMillUnit,
+        chamferOut: renderChamferOutUnit,
+        drillTap: renderDrillTapUnit,
+        generic: renderGenericUnit
+      };
+      const tables = program.units.map(unit => {
+        const type = classifyUnit(unit);
+        const rendered = unitRenderers[type](unit);
+        return type === "generic" ? rendered : rendered.replace("</section>", `${renderPreservedUnit(unit)}</section>`);
+      }).join("");
+      const order = program.executionOrder.filter(item => item.sequence && item.command.startsWith("N"));
+      return `<div class="program-banner">
+        <div><span class="label">FILE </span><span class="value">${escapeHtml(program.sourceFileName || "PAM PROGRAM")}</span></div>
+        <div><span class="label">PROGRAM </span><span class="value">${escapeHtml(program.header.programNumber || "UNKNOWN")}</span></div>
+        <div><span class="label">COMMENT </span><span class="value">${escapeHtml(program.header.comment || "—")}</span></div>
+        <div><span class="label">DOCUMENT </span><span class="value">${program.metadata.rawLineCount} LINES · ${program.metadata.parsedBlockCount} BLOCKS · ${program.metadata.unitCount} UNITS</span></div>
+      </div><div class="mz-order-note">EXECUTION PRIORITIES · ${order.length ? order.map(item => `${escapeHtml(item.unit)} ${escapeHtml(item.sequence)} = P${escapeHtml(item.priorityRaw)}`).join(" · ") : "NONE"}</div><div class="mz-screen">${tables || '<div class="empty">NO UNIT-NUMBERED BLOCKS FOUND</div>'}</div>`;
+    }
+
+    function renderDisplay(program) {
+      viewer.innerHTML = renderProgramMarkup(program);
+    }
+
+    let currentPrograms = [];
+    let activeProgramIndex = 0;
+    let draggedProgramIndex = null;
+    let dropAfterProgram = false;
+
+    function selectProgram(index) {
+      if (!currentPrograms[index]) return;
+      activeProgramIndex = index;
+      [...programFileTabs.querySelectorAll(".program-file-tab")].forEach((button, buttonIndex) => {
+        const isActive = buttonIndex === activeProgramIndex;
+        button.classList.toggle("active", isActive);
+        button.setAttribute("aria-selected", String(isActive));
+      });
+      renderDisplay(currentPrograms[activeProgramIndex]);
+    }
+
+    function renderProgramTabs(selectedProgram = currentPrograms[activeProgramIndex]) {
+      const selectedIndex = Math.max(0, currentPrograms.indexOf(selectedProgram));
+      programFileTabs.innerHTML = currentPrograms.map((program, index) => {
+        const label = `${program.sourceFileName || `PAM ${index + 1}`} · ${program.header.programNumber || "UNKNOWN"}`;
+        return `<button class="program-file-tab${index === selectedIndex ? " active" : ""}" type="button" draggable="true" data-program-index="${index}" aria-selected="${index === selectedIndex}" title="${escapeHtml(label)} · Drag to reorder">${escapeHtml(label)}</button>`;
+      }).join("");
+      programFileTabs.hidden = currentPrograms.length === 0;
+      selectProgram(selectedIndex);
+    }
+
+    function renderPrograms(programs) {
+      currentPrograms = [...programs];
+      renderProgramTabs(currentPrograms[0]);
+    }
+
+    function moveProgramTab(fromIndex, toIndex) {
+      if (fromIndex === toIndex || !currentPrograms[fromIndex] || toIndex < 0 || toIndex >= currentPrograms.length) return toIndex;
+      const selectedProgram = currentPrograms[activeProgramIndex];
+      const [movedProgram] = currentPrograms.splice(fromIndex, 1);
+      currentPrograms.splice(toIndex, 0, movedProgram);
+      renderProgramTabs(selectedProgram);
+      return currentPrograms.indexOf(movedProgram);
+    }
+
+    function clearProgramDropIndicators() {
+      programFileTabs.querySelectorAll(".program-file-tab").forEach(button => button.classList.remove("drag-before", "drag-after", "dragging"));
+    }
+
+    programFileTabs.addEventListener("click", event => {
+      const button = event.target.closest(".program-file-tab");
+      if (!button) return;
+      selectProgram(Number(button.dataset.programIndex));
+    });
+
+    programFileTabs.addEventListener("dragstart", event => {
+      const button = event.target.closest(".program-file-tab");
+      if (!button) return;
+      draggedProgramIndex = Number(button.dataset.programIndex);
+      button.classList.add("dragging");
+      if (event.dataTransfer) {
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData("text/plain", String(draggedProgramIndex));
+      }
+    });
+
+    programFileTabs.addEventListener("dragover", event => {
+      const button = event.target.closest(".program-file-tab");
+      if (!button || draggedProgramIndex === null) return;
+      event.preventDefault();
+      clearProgramDropIndicators();
+      if (Number(button.dataset.programIndex) === draggedProgramIndex) button.classList.add("dragging");
+      const bounds = button.getBoundingClientRect();
+      dropAfterProgram = event.clientX > bounds.left + bounds.width / 2;
+      button.classList.add(dropAfterProgram ? "drag-after" : "drag-before");
+      if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+    });
+
+    programFileTabs.addEventListener("drop", event => {
+      const button = event.target.closest(".program-file-tab");
+      if (!button || draggedProgramIndex === null) return;
+      event.preventDefault();
+      const targetIndex = Number(button.dataset.programIndex);
+      let insertionIndex = targetIndex + (dropAfterProgram ? 1 : 0);
+      if (draggedProgramIndex < insertionIndex) insertionIndex -= 1;
+      insertionIndex = Math.max(0, Math.min(currentPrograms.length - 1, insertionIndex));
+      moveProgramTab(draggedProgramIndex, insertionIndex);
+      draggedProgramIndex = null;
+      clearProgramDropIndicators();
+    });
+
+    programFileTabs.addEventListener("dragend", () => {
+      draggedProgramIndex = null;
+      clearProgramDropIndicators();
+    });
+
+    programFileTabs.addEventListener("keydown", event => {
+      if (!event.altKey || !["ArrowLeft", "ArrowRight"].includes(event.key)) return;
+      const button = event.target.closest(".program-file-tab");
+      if (!button) return;
+      const fromIndex = Number(button.dataset.programIndex);
+      const toIndex = fromIndex + (event.key === "ArrowLeft" ? -1 : 1);
+      if (toIndex < 0 || toIndex >= currentPrograms.length) return;
+      event.preventDefault();
+      const movedIndex = moveProgramTab(fromIndex, toIndex);
+      programFileTabs.querySelector(`[data-program-index="${movedIndex}"]`)?.focus();
+    });
+
+    window.renderDisplay = renderDisplay;
+    window.selectProgram = selectProgram;
+    window.moveProgramTab = moveProgramTab;
+
+    let loadedDocuments = [];
+
+    function runParser(documents = loadedDocuments) {
+      error.textContent = "";
+      const documentsToParse = documents.length ? documents : (source.value.trim() ? [{ name: "PAM PROGRAM", text: source.value }] : []);
+      if (!documentsToParse.length) {
+        error.textContent = "Load one or more PAM files first.";
+        status.textContent = "NO DATA";
+        return;
+      }
+      try {
+        const programs = documentsToParse.map(document => {
+          const program = parseMazatrol(document.text);
+          program.sourceFileName = document.name;
+          program.toolSummary = buildToolSummary(program);
+          return program;
+        });
+        const combinedToolSummary = combineToolSummaries(programs.map(program => program.toolSummary));
+        renderPrograms(programs);
+        renderToolSummary(combinedToolSummary);
+        viewTabs.hidden = false;
+        activateView("program");
+        const totals = programs.reduce((sum, program) => ({
+          units: sum.units + program.metadata.unitCount,
+          sequences: sum.sequences + program.metadata.sequenceCount
+        }), { units: 0, sequences: 0 });
+        jsonOutput.textContent = JSON.stringify({
+          metadata: { programCount: programs.length, unitCount: totals.units, sequenceCount: totals.sequences },
+          programs,
+          toolSummary: combinedToolSummary
+        }, null, 2);
+        status.textContent = `${programs.length} PROGRAM${programs.length === 1 ? "" : "S"} · ${totals.units} UNITS · ${totals.sequences} SEQUENCES`;
+      } catch (problem) {
+        error.textContent = `Parser error: ${problem.message}`;
+        status.textContent = "ERROR";
+      }
+    }
+
+    function readPamFile(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve({ name: file.name, text: String(reader.result) });
+        reader.onerror = () => reject(new Error(`${file.name} could not be read.`));
+        reader.readAsText(file);
+      });
+    }
+
+    async function loadFiles(fileList) {
+      const files = [...fileList];
+      if (!files.length) return;
+      error.textContent = "";
+      status.textContent = `LOADING ${files.length} PROGRAM${files.length === 1 ? "" : "S"}`;
+      try {
+        loadedDocuments = await Promise.all(files.map(readPamFile));
+        source.value = loadedDocuments.map(document => `===== ${document.name} =====\n${document.text}`).join("\n\n");
+        runParser(loadedDocuments);
+        fileInput.value = "";
+      } catch (problem) {
+        error.textContent = problem.message;
+        status.textContent = "FILE ERROR";
+      }
+    }
+
+    fileInput.addEventListener("change", event => loadFiles(event.target.files));
+    ["dragenter", "dragover"].forEach(name => dropZone.addEventListener(name, event => {
+      event.preventDefault(); dropZone.classList.add("dragging");
+    }));
+    ["dragleave", "drop"].forEach(name => dropZone.addEventListener(name, event => {
+      event.preventDefault(); dropZone.classList.remove("dragging");
+    }));
+    dropZone.addEventListener("drop", event => loadFiles(event.dataTransfer.files));
+
+  </script>
+</body>
+</html>
