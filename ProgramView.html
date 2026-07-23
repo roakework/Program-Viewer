@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Mazatrol Conversational Viewer — Feature 1 v2.2 XLSX</title>
+  <title>Mazatrol Conversational Viewer — Build v2.9 XLSX + PBD</title>
   <style>
     :root {
       --bg: #020607;
@@ -287,9 +287,9 @@
     <header class="machine-header">
       <div>
         <h1>MAZATROL CONVERSATIONAL VIEWER</h1>
-        <div class="subtitle">FEATURE 1 v2.1 · PARSER + GRID ENGINE</div>
+        <div class="subtitle">BUILD v2.9 · PBD UNIT 2/3 FIX · XLSX EXPORT</div>
       </div>
-      <div class="status" id="status">READY</div>
+      <div class="status" id="status">READY · BUILD v2.9</div>
     </header>
 
     <nav class="view-tabs" id="viewTabs" aria-label="Application views" hidden>
@@ -480,6 +480,10 @@
           command = `G305U${unit}T${record[9]}&T0D${f(36)}S${pbmSpeed(record)}P${pbmPriority(record, view, base)}K0R0&Q0&E0`;
           break;
         case 0x20: command = `G350U${unit}D${f(36)}H${f(40)}C${f(44)}Q0&E0`; break;
+        case 0x21:
+          command = `G351U${unit}D${f(36)}H${f(40)}C${f(44)}I${record[11] || 0}&D${f(56)}&H${f(60)}Q0&E0(PBD-RECORD-0X21:${pbmBytesHex(record)})`;
+          meta.binaryVariant = "rough-counterbore-0x21";
+          break;
         case 0x23: command = `G353U${unit}D${f(36)}H${f(40)}C${f(44)}A${record[16] || 1}K0Q0&E0`; break;
         case 0x24: {
           const a = record[36] || 1;
@@ -509,6 +513,10 @@
           // LINE LFT header used by this PBD machine generation.
           command = `G362U${unit}H${f(36)}Z${f(40)}R${f(44)}F${record[17] || 1}&Z${f(48)}&R${f(52)}A0B0J${f(56)}C${f(60)}L1Q0&E0`;
           meta.binaryVariant = "line-left-0x42";
+          break;
+        case 0x51:
+          command = `G368U${unit}H${f(36)}I${f(40)}J${f(44)}C${f(48)}A0B0&E0(PBD-RECORD-0X51:${pbmBytesHex(record)})`;
+          meta.binaryVariant = "chamfer-left-0x51";
           break;
         case 0x52: command = `G369U${unit}H${f(36)}I${f(40)}J${f(44)}C${f(48)}A00000000Q0B0&E0`; break;
         case 0x60: command = `G371U${unit}H${f(36)}Z${f(40)}I${record[9] || 1}&Z${f(44)}Q0&E0`; break;
@@ -547,6 +555,10 @@
       if (type === 0xB1) {
         if (parent.type === 0x52) {
           return `${lead}X&${f(40)}Y&${f(44)}Q${q || 7}F0.I${spindle(60)}J${f(64)}${machines}B${pass}&Q0`;
+        }
+        if (parent.type === 0x40) {
+          const zfd = record[14] ? pbmScaledByte(record[14], 10) : "";
+          return `${lead}X&${f(40)}Y&${f(44)}Z${f(48)}V${zfd}I${spindle(60)}J${f(64)}${machines}B${pass}&Q0`;
         }
         if (parent.type === 0x42) {
           return `${lead}X&${f(40)}Y&${f(44)}Z${f(48)}I${spindle(60)}J${f(64)}${machines}B${pass}L1&Q0`;
@@ -593,6 +605,14 @@
         const corner = pbmInt(view, base, 60) ? `R${f(60)}` : "";
         return `N${n}A1X${f(40)}Y${f(44)}${corner}L1P0E0S${first}B1&W0`;
       }
+      if (parent.type === 0x40) {
+        const corner = pbmInt(view, base, 60) ? `R${f(60)}` : "";
+        return `N${n}A1X${f(40)}Y${f(44)}${corner}P0E0S${first}B1&W0`;
+      }
+      if (parent.type === 0x51) {
+        const corner = pbmInt(view, base, 60) ? `R${f(60)}` : "";
+        return `N${n}A1X${f(40)}Y${f(44)}${corner}L1P0E0S${first}B1&W0`;
+      }
       if (parent.type === 0x66) {
         const a = Math.max(1, record[8] - 31);
         return `N${n}A${a}X${f(36)}Y${f(40)}V${f(44)}I${f(48)}J${f(52)}P0E0S${first}B1&W0`;
@@ -628,6 +648,14 @@
     function decodePbdMasterUnit(type, record, view, base) {
       const unit = view.getUint16(base + 2, true);
       const preserved = `(PBD-RECORD-0X${type.toString(16).padStart(2, "0").toUpperCase()}:${pbmBytesHex(record)})`;
+      if (type === 0x08) {
+        const nominalDiameter = pbmNumber(pbmFixed(view, base, 36));
+        const priority = pbmPriority(record, view, base);
+        return {
+          command: `G307U${unit}D${nominalDiameter}P${priority}K0S0${preserved}`,
+          meta: { unit, type, binaryVariant: "mms-tol-sens-0x08" }
+        };
+      }
       if (type === 0x0A) {
         const pallet = view.getUint16(base + 26, true);
         return { command: `G381U${unit}P${pallet}${preserved}`, meta: { unit, type } };
@@ -661,6 +689,14 @@
         };
       }
       return null;
+    }
+
+    function decodePbdMeasurementRow(record, view, base) {
+      const n = pbmSequence(record, view, base);
+      const patternCode = view.getUint32(base + 8, true);
+      const f = offset => pbmNumber(pbmFixed(view, base, offset));
+      const preserved = `(PBD-RECORD-0XA2:${pbmBytesHex(record)})`;
+      return `N${n}A${patternCode}X${f(36)}Y${f(40)}Z${f(44)}R${f(52)}${preserved}`;
     }
 
     function preserveUnknownMazatrolRecord(type, record, view, base, recordIndex, profile, current) {
@@ -709,8 +745,8 @@
         section = kind;
       }
 
-      const unitTypes = new Set([0x03, 0x04, 0x05, 0x06, 0x20, 0x23, 0x24, 0x26, 0x27, 0x29, 0x40, 0x42, 0x52, 0x60, 0x66]);
-      const pbdMasterUnitTypes = new Set([0x02, 0x07, 0x0A, 0x0C]);
+      const unitTypes = new Set([0x03, 0x04, 0x05, 0x06, 0x20, 0x21, 0x23, 0x24, 0x26, 0x27, 0x29, 0x40, 0x42, 0x51, 0x52, 0x60, 0x66]);
+      const pbdMasterUnitTypes = new Set([0x02, 0x07, 0x08, 0x0A, 0x0C]);
       const recordCount = (arrayBuffer.byteLength - profile.headerSize) / PBM_RECORD_SIZE;
       for (let index = 0; index < recordCount; index += 1) {
         const base = profile.headerSize + index * PBM_RECORD_SIZE;
@@ -731,6 +767,9 @@
         } else if (type === 0xA1) {
           openSection("geometry");
           lines.push(decodePbmManualRow(record, view, base, profile));
+        } else if (type === 0xA2 && profile.variant === "legacy-master" && current.type === 0x08) {
+          openSection("geometry");
+          lines.push(decodePbdMeasurementRow(record, view, base));
         } else if (type === 0xA0) {
           // PBD fixed-record files can include three auxiliary setup records
           // before Unit 1. Their values are already represented by the header.
@@ -976,12 +1015,15 @@
         G303: "Sub Program",
         G305: "Manual Unit",
         G306: "WPC Shift",
+        G307: "MMS Tool Sensor",
         G350: "Drilling",
+        G351: "Rough Counterbore",
         G353: "Reaming",
         G354: "Tapping",
         G356: "Circle Mill",
         G359: "Non-Through Boring",
         G362: "Line Center",
+        G368: "Chamfer Left",
         G369: "Chamfer Out",
         G377: "Slot",
         G380: "Offset",
@@ -1048,6 +1090,10 @@
           commands: ["G306"],
           fields: {}
         },
+        measurement: {
+          commands: ["G307"],
+          fields: { D: "NOM-Ø", P: "No.", K: "U.SKIP", S: "$" }
+        },
         palletChange: {
           commands: ["G381"],
           fields: {}
@@ -1066,6 +1112,10 @@
         },
         drilling: {
           commands: ["G350"],
+          fields: {}
+        },
+        roughCounterBore: {
+          commands: ["G351"],
           fields: {}
         },
         reaming: {
@@ -1094,6 +1144,10 @@
         },
         chamferOut: {
           commands: ["G369"],
+          fields: {}
+        },
+        chamferLeft: {
+          commands: ["G368"],
           fields: {}
         },
         cborTap: {
@@ -1134,7 +1188,8 @@
         4: "TAP",
         5: "TAP",
         13: "CHAMFER",
-        15: "END MILL"
+        15: "END MILL",
+        19: "BAL EMIL"
       }
     });
 
@@ -1522,6 +1577,37 @@
       };
     }
 
+    function parseRoughCounterBoreHeader(block) {
+      return {
+        unitName: "RGH CBOR",
+        counterboreDiameter: drillingValue(block, "D", 1),
+        counterboreDepth: drillingValue(block, "H", 1),
+        chamfer: drillingValue(block, "C", 0),
+        bottom: drillingValue(block, "I", 0),
+        diameter: drillingValue(block, "D", 0),
+        depth: drillingValue(block, "H", 0),
+        raw: block.raw
+      };
+    }
+
+    function parseRoughCounterBoreToolRow(block) {
+      const row = parseDrillingToolRow(block);
+      const isCenterDrill = row.toolNumber === 1;
+      const fCode = manualParameter(block, "F")?.value ?? null;
+      return {
+        ...row,
+        toolName: isCenterDrill ? "CTR-DR" : row.toolName,
+        holeDepth: isCenterDrill ? "♦" : row.holeDepth,
+        preDiameter: isCenterDrill ? "♦" : row.preDiameter,
+        preDepth: isCenterDrill ? "♦" : row.preDepth,
+        rough: isCenterDrill ? "90°" : (fCode === 3 || fCode === 19 ? "PCK2" : row.rough),
+        depthAddress: isCenterDrill ? "" : "T",
+        depth: isCenterDrill ? "CTR-D" : row.depth,
+        depthDisplay: isCenterDrill ? "CTR-D" : "",
+        depthAddressClass: isCenterDrill ? "" : "green"
+      };
+    }
+
     // G359 Non-through-hole boring rules.
     function parseNonThroughBoringHeader(block) {
       return {
@@ -1712,8 +1798,12 @@
       const sCode = manualParameter(block, "S")?.value ?? null;
       const priorityInfo = parsedPriority(block);
       const isLineLeft = manualParameter(block, "L")?.value === 1;
+      const zfdValue = lineCenterValue(block, "V", 0);
+      const depthZ = lineCenterValue(block, "Z", 0);
+      const finishPass = manualParameter(block, "B")?.value === 1;
       return {
         sequenceNumber: Number(block.command.slice(1)),
+        rowMode: finishPass ? "F" : "R",
         toolNumber,
         toolName: block.comments[0] || CONTEXTUAL_MAPPING_DICTIONARY.toolCallouts[toolNumber] || "FCE MILL",
         nominalDiameter: lineCenterValue(block, "D", 0),
@@ -1723,8 +1813,8 @@
         approachX: lineCenterValue(block, "X", 0),
         approachY: lineCenterValue(block, "Y", 0),
         processType: "♦",
-        zfd: "G01",
-        depthZ: lineCenterValue(block, "Z", 0),
+        zfd: zfdValue || "G01",
+        depthZ: zfdValue && Number(depthZ) === 0 ? "♦" : depthZ,
         widthR: isLineLeft ? "" : "♦",
         cuttingSpeed: lineCenterValue(block, "I", 0),
         feedRate: lineCenterValue(block, "J", 0),
@@ -1859,6 +1949,37 @@
       };
     }
 
+    function parseMeasurementHeader(block) {
+      const priority = parsedPriority(block);
+      return {
+        unitName: "MMS",
+        toolName: "TOL SENS",
+        nominalDiameter: pbdMasterValue(block, "D"),
+        priority: priority.rawValue || "",
+        priorityIsLate: priority.isLate,
+        unitSkip: pbdMasterValue(block, "K") || "0",
+        dollarFlag: "♦",
+        raw: block.raw
+      };
+    }
+
+    function parseMeasurementGeometryRow(block) {
+      const patternCode = Number(pbdMasterValue(block, "A"));
+      return {
+        sequenceNumber: Number(block.command.slice(1)),
+        pattern: ({ 1: "X-FACE", 2: "Y-FACE", 3: "Z-FACE" })[patternCode] || (patternCode ? `PTN ${patternCode}` : ""),
+        x: pbdMasterValue(block, "X"),
+        y: pbdMasterValue(block, "Y"),
+        z: pbdMasterValue(block, "Z"),
+        fourthAxis: "♦",
+        fifthAxis: "♦",
+        radius: pbdMasterValue(block, "R") || "0.",
+        diameterLength: "♦",
+        k: "♦",
+        raw: block.raw
+      };
+    }
+
     function parseIndexingHeader(block) {
       const direction = Number(pbdMasterValue(block, "E"));
       return {
@@ -1951,15 +2072,42 @@
     }
 
     function parseChamferOutGeometryRow(block) {
+      const secondX = chamferOutValue(block, "X", 1);
+      const radius = chamferOutValue(block, "R", 0);
       return {
         sequenceNumber: Number(block.command.slice(1)),
-        pattern: manualParameter(block, "A")?.value === 1 ? "SQR" : "",
+        pattern: manualParameter(block, "A")?.value === 1 ? "LINE" : "",
         p1x: chamferOutValue(block, "X", 0),
         p1y: chamferOutValue(block, "Y", 0),
-        p3x: chamferOutValue(block, "X", 1),
+        p3x: secondX || radius,
         p3y: chamferOutValue(block, "Y", 1),
         corners: ["", "", "", ""],
         raw: block.raw
+      };
+    }
+
+    function parseChamferLeftHeader(block) {
+      const startCode = manualParameter(block, "A")?.value ?? null;
+      const endCode = manualParameter(block, "B")?.value ?? startCode;
+      return {
+        unitName: "CHMF LFT",
+        depth: chamferOutValue(block, "H", 0),
+        intersectionAxis: chamferOutValue(block, "I", 0),
+        intersectionRadius: chamferOutValue(block, "J", 0),
+        chamfer: chamferOutValue(block, "C", 0),
+        start: startCode === 0 ? "OPEN" : "",
+        end: endCode === 0 ? "OPEN" : "",
+        raw: block.raw
+      };
+    }
+
+    function parseChamferLeftToolRow(block) {
+      return {
+        ...parseChamferOutToolRow(block),
+        processType: "♦",
+        zfd: "G01",
+        depthZ: "♦",
+        widthR: ""
       };
     }
 
@@ -2019,6 +2167,15 @@
       if (unitType === "drilling" && /^N\d+$/i.test(block.command) && context.sectionCommand === "G420") {
         block.drillingGeometryRow = parseDrillingGeometryRow(block);
       }
+      if (unitType === "roughCounterBore" && block.command === "G351") {
+        block.roughCounterBoreHeader = parseRoughCounterBoreHeader(block);
+      }
+      if (unitType === "roughCounterBore" && /^N\d+$/i.test(block.command) && context.sectionCommand === "G424") {
+        block.drillingToolRow = parseRoughCounterBoreToolRow(block);
+      }
+      if (unitType === "roughCounterBore" && /^N\d+$/i.test(block.command) && context.sectionCommand === "G420") {
+        block.drillingGeometryRow = parseDrillingGeometryRow(block);
+      }
       if (unitType === "nonThroughBoring" && block.command === "G359") {
         block.nonThroughBoringHeader = parseNonThroughBoringHeader(block);
       }
@@ -2073,6 +2230,12 @@
       if (unitType === "wpcShift" && block.command === "G306") {
         block.wpcShiftHeader = parseWpcShiftHeader(block);
       }
+      if (unitType === "measurement" && block.command === "G307") {
+        block.measurementHeader = parseMeasurementHeader(block);
+      }
+      if (unitType === "measurement" && /^N\d+$/i.test(block.command) && context.sectionCommand === "G420") {
+        block.measurementGeometryRow = parseMeasurementGeometryRow(block);
+      }
       if (unitType === "indexing" && block.command === "G382") {
         block.indexingHeader = parseIndexingHeader(block);
       }
@@ -2081,6 +2244,15 @@
       }
       if (unitType === "endProgram" && block.command === "G301") {
         block.endProgramHeader = parseEndProgramHeader(block);
+      }
+      if (unitType === "chamferLeft" && block.command === "G368") {
+        block.chamferLeftHeader = parseChamferLeftHeader(block);
+      }
+      if (unitType === "chamferLeft" && /^N\d+$/i.test(block.command) && context.sectionCommand === "G424") {
+        block.chamferLeftToolRow = parseChamferLeftToolRow(block);
+      }
+      if (unitType === "chamferLeft" && /^N\d+$/i.test(block.command) && context.sectionCommand === "G420") {
+        block.lineCenterGeometryRow = parseLineCenterGeometryRow(block);
       }
       if (unitType === "chamferOut" && block.command === "G369") {
         block.chamferOutHeader = parseChamferOutHeader(block);
@@ -2987,7 +3159,11 @@
         const block = sequence.blocks[0];
         const row = sequence.drillingToolRow || block.drillingToolRow || parseDrillingToolRow(block);
         const roughClass = row.rough === "PCK2" ? "magenta" : ["PCK1", "DRIL"].includes(row.rough) ? "op" : "";
-        const depthCell = row.toolName === "BOR BAR"
+        const depthCell = row.depthDisplay
+          ? mzCell(row.depthDisplay, "left")
+          : row.depthAddressClass
+          ? mzHtmlCell(`<span class="${escapeHtml(row.depthAddressClass)}">${escapeHtml(row.depthAddress)}</span> ${escapeHtml(row.depth)}`, "left")
+          : row.toolName === "BOR BAR"
           ? mzHtmlCell(`<span class="green">${escapeHtml(row.depthAddress)}</span> ${escapeHtml(row.depth)}`, "left")
           : mzCell(`${row.depthAddress} ${row.depth}`, "left");
         return [
@@ -3019,6 +3195,18 @@
       const headers = ["Unit No.", "UNIT", "", "DIA", "DEPTH", "CHMF"].map(label => ({ label }));
       const row = [mzCell(unit.number, "row-no"), mzCell(header.unitName, "op"), mzCell(""), mzCell(header.diameter), mzCell(header.depth), mzCell(header.chamfer)];
       return `<section class="mz-unit">${renderMzTable(headers, [row], "unit-head")}${renderDrillingTools(unit)}${renderDrillingGeometry(unit)}</section>`;
+    }
+
+    function renderRoughCounterBoreUnit(unit) {
+      const cycle = blockFor(unit, "G351") || unit.blocks[0];
+      const header = cycle?.roughCounterBoreHeader || parseRoughCounterBoreHeader(cycle);
+      const headers = ["UNo.", "UNIT", "", "CB-DIA", "CB-DEP", "CHMF", "BTM", "DIA", "DEPTH", ""].map(label => ({ label }));
+      const row = [
+        mzCell(unit.number, "row-no"), mzCell(header.unitName, "op"), mzCell(""),
+        mzCell(header.counterboreDiameter), mzCell(header.counterboreDepth), mzCell(header.chamfer),
+        mzCell(header.bottom), mzCell(header.diameter), mzCell(header.depth), mzCell("")
+      ];
+      return `<section class="mz-unit rough-counterbore-unit">${renderMzTable(headers, [row], "unit-head")}${renderDrillingTools(unit)}${renderDrillingGeometry(unit)}</section>`;
     }
 
     function renderNonThroughBoringUnit(unit) {
@@ -3125,7 +3313,7 @@
         const block = sequence.blocks[0];
         const row = sequence.lineCenterToolRow || block.lineCenterToolRow || parseLineCenterToolRow(block);
         return [
-          mzCell(`R ${row.sequenceNumber}`, "row-no"), mzCell(row.toolName, "op", `Tool No. ${row.toolNumber ?? ""}`),
+          mzCell(`${row.rowMode || "R"} ${row.sequenceNumber}`, "row-no"), mzCell(row.toolName, "op", `Tool No. ${row.toolNumber ?? ""}`),
           mzCell(row.nominalDiameter), mzCell(row.diameterFlag, row.diameterFlag === "H" ? "red" : "green"), mzCell(row.priority, row.priorityIsLate ? "magenta" : "priority", "Execution priority"),
           mzCell(row.approachX, "yellow"), mzCell(row.approachY, "yellow"), mzCell(row.processType, "diamond"),
           mzCell(row.zfd, "green left"), mzCell(row.depthZ), mzCell(row.widthR, "diamond"),
@@ -3258,6 +3446,50 @@
       return `<section class="mz-unit">${renderMzTable(headers, [row], "unit-head")}</section>`;
     }
 
+    function renderMeasurementUnit(unit) {
+      const block = blockFor(unit, "G307") || unit.blocks[0];
+      const header = block?.measurementHeader || parseMeasurementHeader(block);
+      const unitHeaders = [
+        { label: "UNo." }, { label: "UNIT" }, { label: "TOOL", colspan: 2 },
+        { label: "NOM-Ø", colspan: 2 }, { label: "No." }, { label: "" },
+        { label: "U.SKIP" }, { label: "$" }
+      ];
+      const unitRow = [
+        mzCell(unit.number, "row-no"),
+        mzCell(header.unitName, "op"),
+        { ...mzCell(header.toolName, "op left"), colspan: 2 },
+        { ...mzCell(header.nominalDiameter), colspan: 2 },
+        mzCell(header.priority, header.priorityIsLate ? "magenta" : "priority"),
+        mzCell(""),
+        mzCell(header.unitSkip),
+        mzCell(header.dollarFlag)
+      ];
+      const geometryHeaders = ["SNo.", "PTN", "X", "Y", "Z", "4", "5", "R", "D/L", "K"].map(label => ({ label }));
+      const geometryRows = unit.sequences
+        .filter(sequence => sequence.contextCommand === "G420")
+        .map(sequence => {
+          const rowBlock = sequence.blocks[0];
+          const row = rowBlock.measurementGeometryRow || parseMeasurementGeometryRow(rowBlock);
+          return [
+            mzCell(row.sequenceNumber, "row-no"),
+            mzCell(row.pattern, "op left"),
+            mzCell(row.x),
+            mzCell(row.y),
+            mzCell(row.z),
+            mzCell(row.fourthAxis),
+            mzCell(row.fifthAxis),
+            mzCell(row.radius),
+            mzCell(row.diameterLength),
+            mzCell(row.k)
+          ];
+        });
+      const fallbackRow = [[
+        mzCell("", "row-no"), mzCell("", "op left"), mzCell(""), mzCell(""), mzCell(""),
+        mzCell("♦"), mzCell("♦"), mzCell("0."), mzCell("♦"), mzCell("♦")
+      ]];
+      return `<section class="mz-unit measurement-unit">${renderMzTable(unitHeaders, [unitRow], "unit-head")}${renderMzTable(geometryHeaders, geometryRows.length ? geometryRows : fallbackRow, "fig-head")}</section>`;
+    }
+
     function renderIndexingUnit(unit) {
       const block = blockFor(unit, "G382") || unit.blocks[0];
       const header = unit.indexingHeader || block?.indexingHeader || parseIndexingHeader(block);
@@ -3333,6 +3565,38 @@
       const headers = ["Unit No.", "UNIT", "", "DEPTH", "INTER-AX", "INTER-R", "CHMF"].map(label => ({ label }));
       const row = [mzCell(unit.number, "row-no"), mzCell(header.unitName, "op"), mzCell(""), mzCell(header.depth), mzCell(header.intersectionAxis), mzCell(header.intersectionRadius), mzCell(header.chamfer)];
       return `<section class="mz-unit">${renderMzTable(headers, [row], "unit-head")}${renderChamferOutTools(unit)}${renderChamferOutGeometry(unit)}</section>`;
+    }
+
+    function renderChamferLeftTools(unit) {
+      const sequences = unit.sequences.filter(sequence => sequence.contextCommand === "G424");
+      if (!sequences.length) return "";
+      const headers = ["SNo.", "TOOL", "NOM-Ø", "", "No.", "APRCH-X", "APRCH-Y", "TYPE", "ZFD", "DEP-Z", "WID-R", "C-SP", "FR", "M", "M", "M"].map(label => ({ label }));
+      const rows = sequences.map(sequence => {
+        const block = sequence.blocks[0];
+        const row = block.chamferLeftToolRow || parseChamferLeftToolRow(block);
+        return [
+          mzCell(row.sequenceNumber, "row-no"), mzCell(row.toolName, "op", `Tool No. ${row.toolNumber ?? ""}`),
+          mzCell(row.nominalDiameter), mzCell(row.toolFlag, "green"),
+          mzCell(row.priority, row.priorityIsLate ? "magenta" : "priority", "Execution priority"),
+          mzCell(row.approachX, "yellow"), mzCell(row.approachY, "yellow"),
+          mzCell(row.processType, "diamond"), mzCell(row.zfd, "green left"),
+          mzCell(row.depthZ, "diamond"), mzCell(row.widthR),
+          mzCell(row.cuttingSpeed), mzCell(row.feedRate), ...row.mCodes.map(code => mzCell(code))
+        ];
+      });
+      return renderMzTable(headers, rows, "tool-head");
+    }
+
+    function renderChamferLeftUnit(unit) {
+      const cycle = blockFor(unit, "G368") || unit.blocks[0];
+      const header = cycle?.chamferLeftHeader || parseChamferLeftHeader(cycle);
+      const headers = ["UNo.", "UNIT", "", "DEPTH", "INTER-AX", "INTER-R", "CHMF", "START", "END", ""].map(label => ({ label }));
+      const row = [
+        mzCell(unit.number, "row-no"), mzCell(header.unitName, "op"), mzCell(""),
+        mzCell(header.depth), mzCell(header.intersectionAxis), mzCell(header.intersectionRadius),
+        mzCell(header.chamfer), mzCell(header.start, "left"), mzCell(header.end, "left"), mzCell("")
+      ];
+      return `<section class="mz-unit">${renderMzTable(headers, [row], "unit-head")}${renderChamferLeftTools(unit)}${renderLineCenterGeometry(unit)}</section>`;
     }
 
     function formatManualCycleDuration(minutes) {
@@ -3509,18 +3773,21 @@
       if (blockFor(unit, "G303")) return "subProgram";
       if (blockFor(unit, "G305")) return "manual";
       if (blockFor(unit, "G306")) return "wpcShift";
+      if (blockFor(unit, "G307")) return "measurement";
       if (blockFor(unit, "G300")) return "initialSetup";
       if (blockFor(unit, "G380")) return "offset";
       if (blockFor(unit, "G381")) return "palletChange";
       if (blockFor(unit, "G382")) return "indexing";
       if (blockFor(unit, "G371")) return "faceMill";
       if (blockFor(unit, "G350")) return "drilling";
+      if (blockFor(unit, "G351")) return "roughCounterBore";
       if (blockFor(unit, "G359")) return "nonThroughBoring";
       if (blockFor(unit, "G353")) return "reaming";
       if (blockFor(unit, "G354")) return "tapping";
       if (blockFor(unit, "G362")) return "lineCenter";
       if (blockFor(unit, "G377")) return "slot";
       if (blockFor(unit, "G356")) return "circleMill";
+      if (blockFor(unit, "G368")) return "chamferLeft";
       if (blockFor(unit, "G369")) return "chamferOut";
       if (blockFor(unit, "G357")) return "drillTap";
       return "generic";
@@ -3532,6 +3799,7 @@
         mCode: renderMCodeUnit,
         subProgram: renderSubProgramUnit,
         wpcShift: renderWpcShiftUnit,
+        measurement: renderMeasurementUnit,
         palletChange: renderPalletChangeUnit,
         indexing: renderIndexingUnit,
         manual: renderManualUnit,
@@ -3539,12 +3807,14 @@
         offset: renderOffsetUnit,
         faceMill: renderFaceMillUnit,
         drilling: renderDrillingUnit,
+        roughCounterBore: renderRoughCounterBoreUnit,
         nonThroughBoring: renderNonThroughBoringUnit,
         reaming: renderReamingUnit,
         tapping: renderTappingUnit,
         lineCenter: renderLineCenterUnit,
         slot: renderSlotUnit,
         circleMill: renderCircleMillUnit,
+        chamferLeft: renderChamferLeftUnit,
         chamferOut: renderChamferOutUnit,
         drillTap: renderDrillTapUnit,
         generic: renderGenericUnit
