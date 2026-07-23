@@ -272,20 +272,20 @@
         <div class="panel-title">PAM INPUT</div>
         <div class="input-body">
           <label class="drop-zone" id="dropZone" for="fileInput">
-            LOAD .PAM / .PBM / .TXT FILES
-            <small>Click or drag all face programs here · PBM is converted for viewer use</small>
+            LOAD .PAM / .PBM / .PBD / .TXT FILES
+            <small>Click or drag all face programs here · PBM/PBD is converted for viewer use</small>
           </label>
-          <input id="fileInput" type="file" accept=".pam,.pbm,.txt,text/plain,application/octet-stream" multiple>
+          <input id="fileInput" type="file" accept=".pam,.pbm,.pbd,.txt,text/plain,application/octet-stream" multiple>
           <textarea id="source" spellcheck="false" aria-label="Raw PAM data" placeholder="Uploaded PAM programs will appear here" readonly></textarea>
           <div class="error" id="error" role="alert"></div>
         </div>
       </aside>
 
-      <nav class="program-file-tabs" id="programFileTabs" aria-label="Uploaded PAM and PBM programs" hidden></nav>
+      <nav class="program-file-tabs" id="programFileTabs" aria-label="Uploaded PAM, PBM, and PBD programs" hidden></nav>
 
       <section class="panel" aria-live="polite">
         <div class="panel-title">CONVERSATIONAL PROGRAM GRID</div>
-        <div id="viewer"><div class="empty">UPLOAD A .PAM OR .PBM FILE TO BEGIN</div></div>
+        <div id="viewer"><div class="empty">UPLOAD A .PAM, .PBM, OR .PBD FILE TO BEGIN</div></div>
       </section>
     </section>
 
@@ -315,12 +315,48 @@
   </main>
 
   <script>
-    // ---------- PBM import adapter ----------
-    // PBM is Mazak's fixed-record binary representation. This adapter creates a
+    // ---------- PBM/PBD import adapter ----------
+    // PBM and PBD are Mazak fixed-record binary representations. This adapter creates a
     // viewer-compatible PAM transcription; it is intentionally not controller output.
     const PBM_HEADER_SIZE = 360;
+    const PBD_HEADER_SIZE = 352;
     const PBM_RECORD_SIZE = 100;
     const PBM_FIXED_SCALE = 100000;
+
+    function detectMazatrolBinaryProfile(arrayBuffer, fileName = "") {
+      const byteLength = arrayBuffer?.byteLength;
+      if (!Number.isFinite(byteLength)) throw new Error("Mazatrol binary conversion requires file data.");
+      const extension = String(fileName).match(/\.([^.]+)$/)?.[1]?.toUpperCase() || "";
+      const pbmFits = byteLength >= PBM_HEADER_SIZE && (byteLength - PBM_HEADER_SIZE) % PBM_RECORD_SIZE === 0;
+      const pbdFits = byteLength >= PBD_HEADER_SIZE && (byteLength - PBD_HEADER_SIZE) % PBM_RECORD_SIZE === 0;
+      if (extension === "PBM" && pbmFits) {
+        return { sourceFormat: "PBM", headerSize: PBM_HEADER_SIZE, initialZOffset: 300, materialOffset: 344, variant: "fixed-record" };
+      }
+      if (extension === "PBD" && pbdFits) {
+        const firstType = new Uint8Array(arrayBuffer)[PBD_HEADER_SIZE];
+        return {
+          sourceFormat: "PBD",
+          headerSize: PBD_HEADER_SIZE,
+          initialZOffset: 292,
+          materialOffset: 336,
+          variant: firstType === 0xA0 ? "fixed-record" : "legacy-master"
+        };
+      }
+      if (pbmFits) {
+        return { sourceFormat: "PBM", headerSize: PBM_HEADER_SIZE, initialZOffset: 300, materialOffset: 344, variant: "fixed-record" };
+      }
+      if (pbdFits) {
+        const firstType = new Uint8Array(arrayBuffer)[PBD_HEADER_SIZE];
+        return {
+          sourceFormat: "PBD",
+          headerSize: PBD_HEADER_SIZE,
+          initialZOffset: 292,
+          materialOffset: 336,
+          variant: firstType === 0xA0 ? "fixed-record" : "legacy-master"
+        };
+      }
+      throw new Error(`${fileName || "File"} is not a supported fixed-record Mazatrol PBM/PBD file.`);
+    }
 
     function pbmAscii(bytes, offset, length) {
       let text = "";
@@ -531,19 +567,55 @@
       return parts.join("");
     }
 
-    function convertPbmToPam(arrayBuffer, fileName = "PROGRAM.PBM") {
-      if (!arrayBuffer || typeof arrayBuffer.byteLength !== "number") throw new Error("PBM conversion requires binary file data.");
-      if (arrayBuffer.byteLength < PBM_HEADER_SIZE || (arrayBuffer.byteLength - PBM_HEADER_SIZE) % PBM_RECORD_SIZE !== 0) {
-        throw new Error(`${fileName} is not a supported fixed-record Mazak PBM file.`);
+    function decodePbdMasterUnit(type, record, view, base) {
+      const unit = view.getUint16(base + 2, true);
+      const preserved = `(PBD-RECORD-0X${type.toString(16).padStart(2, "0").toUpperCase()}:${pbmBytesHex(record)})`;
+      if (type === 0x0A) {
+        const pallet = view.getUint16(base + 26, true);
+        return { command: `G381U${unit}P${pallet}${preserved}`, meta: { unit, type } };
       }
+      if (type === 0x07) {
+        const addresses = ["MA", "MB", "MC", "MD", "ME", "MF", "MG", "MH", "MI", "MJ", "MK", "ML"];
+        const mCodes = addresses.map((address, slot) => {
+          const value = view.getUint16(base + 36 + slot * 2, true);
+          return value ? `${address}${value}` : "";
+        }).join("");
+        return {
+          command: `G302U${unit}P${pbmPriority(record, view, base)}${mCodes}${preserved}`,
+          meta: { unit, type }
+        };
+      }
+      if (type === 0x02) {
+        const f = offset => pbmNumber(pbmFixed(view, base, offset));
+        const wpc = record[8] || 0;
+        return {
+          command: `G306U${unit}V${wpc}X${f(36)}Y${f(40)}E${f(44)}Z${f(48)}F${f(52)}H${f(56)}${preserved}`,
+          meta: { unit, type }
+        };
+      }
+      if (type === 0x0C) {
+        const turnPositionZ = pbmNumber(pbmFixed(view, base, 36));
+        const angle = pbmNumber(pbmInt(view, base, 40) / 10000);
+        const direction = record[8] || 0;
+        return {
+          command: `G382U${unit}Z${turnPositionZ}D${angle}E${direction}${preserved}`,
+          meta: { unit, type }
+        };
+      }
+      return null;
+    }
+
+    function convertMazatrolBinaryToPam(arrayBuffer, fileName = "PROGRAM.PBM") {
+      if (!arrayBuffer || typeof arrayBuffer.byteLength !== "number") throw new Error("PBM/PBD conversion requires binary file data.");
+      const profile = detectMazatrolBinaryProfile(arrayBuffer, fileName);
       const bytes = new Uint8Array(arrayBuffer);
       const view = new DataView(arrayBuffer);
       const numberMatch = fileName.match(/\d+/);
       const programNumber = numberMatch ? numberMatch[0] : "0000";
       const commentTail = pbmAscii(bytes, 80, 96);
       const comment = commentTail ? `MG3-261:${commentTail}` : "MG3-261";
-      const material = pbmAscii(bytes, 344, 16) || "MATERIAL";
-      const initialZ = pbmNumber(view.getInt32(300, true) / PBM_FIXED_SCALE);
+      const material = pbmAscii(bytes, profile.materialOffset, 16) || "MATERIAL";
+      const initialZ = pbmNumber(view.getInt32(profile.initialZOffset, true) / PBM_FIXED_SCALE);
       const lines = [`O${programNumber}(${comment})`, `G300U0P0D0(${pbmHex(material)})Z${initialZ}A0B1G0`];
       let section = null;
       let current = { unit: 0, type: 0 };
@@ -561,15 +633,16 @@
       }
 
       const unitTypes = new Set([0x03, 0x04, 0x05, 0x06, 0x20, 0x23, 0x24, 0x26, 0x27, 0x29, 0x40, 0x52, 0x60, 0x66]);
-      const recordCount = (arrayBuffer.byteLength - PBM_HEADER_SIZE) / PBM_RECORD_SIZE;
+      const pbdMasterUnitTypes = new Set([0x02, 0x07, 0x0A, 0x0C]);
+      const recordCount = (arrayBuffer.byteLength - profile.headerSize) / PBM_RECORD_SIZE;
       for (let index = 0; index < recordCount; index += 1) {
-        const base = PBM_HEADER_SIZE + index * PBM_RECORD_SIZE;
+        const base = profile.headerSize + index * PBM_RECORD_SIZE;
         const record = bytes.subarray(base, base + PBM_RECORD_SIZE);
         const type = record[0];
         if (unitTypes.has(type)) {
           closeSection();
           const decoded = decodePbmUnitHeader(type, record, view, base);
-          if (!decoded) throw new Error(`Unsupported PBM unit record 0x${type.toString(16)} at record ${index + 1}.`);
+          if (!decoded) throw new Error(`Unsupported ${profile.sourceFormat} unit record 0x${type.toString(16)} at record ${index + 1}.`);
           current = decoded.meta;
           lines.push(decoded.command);
         } else if ([0xB0, 0xB1, 0xB2].includes(type)) {
@@ -581,10 +654,18 @@
         } else if (type === 0xA1) {
           openSection("geometry");
           lines.push(decodePbmManualRow(record, view, base));
+        } else if (type === 0xA0) {
+          // PBD fixed-record files can include three auxiliary setup records
+          // before Unit 1. Their values are already represented by the header.
+        } else if (profile.variant === "legacy-master" && pbdMasterUnitTypes.has(type)) {
+          closeSection();
+          const decoded = decodePbdMasterUnit(type, record, view, base);
+          current = decoded.meta;
+          lines.push(decoded.command);
         } else if (type === 0xD0 || type === 0xD7) {
           // Auxiliary cycle-definition records do not affect the current viewer grids.
         } else {
-          throw new Error(`Unsupported PBM record 0x${type.toString(16).padStart(2, "0")} at record ${index + 1}.`);
+          throw new Error(`Unsupported ${profile.sourceFormat} record 0x${type.toString(16).padStart(2, "0")} at record ${index + 1}.`);
         }
       }
       closeSection();
@@ -592,8 +673,14 @@
       return lines.join("\n");
     }
 
+    function convertPbmToPam(arrayBuffer, fileName = "PROGRAM.PBM") {
+      return convertMazatrolBinaryToPam(arrayBuffer, fileName);
+    }
+
+    window.detectMazatrolBinaryProfile = detectMazatrolBinaryProfile;
+    window.convertMazatrolBinaryToPam = convertMazatrolBinaryToPam;
     window.convertPbmToPam = convertPbmToPam;
-    // ---------- End PBM import adapter ----------
+    // ---------- End PBM/PBD import adapter ----------
 
     // ---------- Feature 1: pure parser engine ----------
     function decodeHexUtf8(hex) {
@@ -664,8 +751,10 @@
       const commandLabels = {
         G300: "Initial Setup",
         G301: "End",
+        G302: "M-Code",
         G303: "Sub Program",
         G305: "Manual Unit",
+        G306: "WPC Shift",
         G350: "Drilling",
         G353: "Reaming",
         G354: "Tapping",
@@ -675,6 +764,8 @@
         G369: "Chamfer Out",
         G377: "Slot",
         G380: "Offset",
+        G381: "Pallet Change",
+        G382: "Indexing",
         G371: "Cycle",
         G424: "Tool Process",
         G420: "Geometry"
@@ -726,6 +817,22 @@
         },
         subProgram: {
           commands: ["G303"],
+          fields: {}
+        },
+        mCode: {
+          commands: ["G302"],
+          fields: {}
+        },
+        wpcShift: {
+          commands: ["G306"],
+          fields: {}
+        },
+        palletChange: {
+          commands: ["G381"],
+          fields: {}
+        },
+        indexing: {
+          commands: ["G382"],
           fields: {}
         },
         offset: {
@@ -1484,6 +1591,59 @@
       };
     }
 
+    // PBD master-program units.
+    function pbdMasterValue(block, key, occurrence = 0) {
+      const parameter = manualParameter(block, key, occurrence);
+      return parameter ? contextualValue(parameter).replace(/^&/, "") : "";
+    }
+
+    function parsePalletChangeHeader(block) {
+      return {
+        unitName: "PALT CHG",
+        palletNumber: pbdMasterValue(block, "P"),
+        raw: block.raw
+      };
+    }
+
+    function parseMCodeHeader(block) {
+      const priority = parsedPriority(block);
+      return {
+        unitName: "M-CODE",
+        priority: priority.rawValue || "",
+        priorityIsLate: priority.isLate,
+        mCodes: ["MA", "MB", "MC", "MD", "ME", "MF", "MG", "MH", "MI", "MJ", "MK", "ML"]
+          .map(address => pbdMasterValue(block, address)),
+        raw: block.raw
+      };
+    }
+
+    function parseWpcShiftHeader(block) {
+      const wpcNumber = pbdMasterValue(block, "V");
+      return {
+        unitName: "WPC-",
+        wpcNumber,
+        additionalWpc: "",
+        x: pbdMasterValue(block, "X"),
+        y: pbdMasterValue(block, "Y"),
+        theta: pbdMasterValue(block, "E"),
+        z: pbdMasterValue(block, "Z"),
+        raw: block.raw
+      };
+    }
+
+    function parseIndexingHeader(block) {
+      const direction = Number(pbdMasterValue(block, "E"));
+      return {
+        unitName: "INDEX",
+        turnPositionX: "",
+        turnPositionY: "",
+        turnPositionZ: pbdMasterValue(block, "Z"),
+        angle: pbdMasterValue(block, "D"),
+        turnDirection: ({ 0: "CW", 1: "CCW", 2: "NEAR DIR." })[direction] || "",
+        raw: block.raw
+      };
+    }
+
     // G303 Sub Program rules. Isolated so existing Unit types remain unchanged.
     function parseSubProgramHeader(block) {
       const repeatParameter = manualParameter(block, "F");
@@ -1676,6 +1836,18 @@
       if (unitType === "slot" && /^N\d+$/i.test(block.command) && context.sectionCommand === "G420") {
         block.slotGeometryRow = parseSlotGeometryRow(block);
       }
+      if (unitType === "palletChange" && block.command === "G381") {
+        block.palletChangeHeader = parsePalletChangeHeader(block);
+      }
+      if (unitType === "mCode" && block.command === "G302") {
+        block.mCodeHeader = parseMCodeHeader(block);
+      }
+      if (unitType === "wpcShift" && block.command === "G306") {
+        block.wpcShiftHeader = parseWpcShiftHeader(block);
+      }
+      if (unitType === "indexing" && block.command === "G382") {
+        block.indexingHeader = parseIndexingHeader(block);
+      }
       if (unitType === "subProgram" && block.command === "G303") {
         block.subProgramHeader = parseSubProgramHeader(block);
       }
@@ -1740,6 +1912,10 @@
               tappingHeader: block.tappingHeader || null,
               lineCenterHeader: block.lineCenterHeader || null,
               slotHeader: block.slotHeader || null,
+              palletChangeHeader: block.palletChangeHeader || null,
+              mCodeHeader: block.mCodeHeader || null,
+              wpcShiftHeader: block.wpcShiftHeader || null,
+              indexingHeader: block.indexingHeader || null,
               subProgramHeader: block.subProgramHeader || null,
               chamferOutHeader: block.chamferOutHeader || null,
               endProgramHeader: block.endProgramHeader || null,
@@ -1764,6 +1940,10 @@
           if (block.tappingHeader) currentUnit.tappingHeader = block.tappingHeader;
           if (block.lineCenterHeader) currentUnit.lineCenterHeader = block.lineCenterHeader;
           if (block.slotHeader) currentUnit.slotHeader = block.slotHeader;
+          if (block.palletChangeHeader) currentUnit.palletChangeHeader = block.palletChangeHeader;
+          if (block.mCodeHeader) currentUnit.mCodeHeader = block.mCodeHeader;
+          if (block.wpcShiftHeader) currentUnit.wpcShiftHeader = block.wpcShiftHeader;
+          if (block.indexingHeader) currentUnit.indexingHeader = block.indexingHeader;
           if (block.subProgramHeader) currentUnit.subProgramHeader = block.subProgramHeader;
           if (block.chamferOutHeader) currentUnit.chamferOutHeader = block.chamferOutHeader;
           if (block.endProgramHeader) currentUnit.endProgramHeader = block.endProgramHeader;
@@ -1914,6 +2094,10 @@
     window.parseSlotHeader = parseSlotHeader;
     window.parseSlotToolRow = parseSlotToolRow;
     window.parseSlotGeometryRow = parseSlotGeometryRow;
+    window.parsePalletChangeHeader = parsePalletChangeHeader;
+    window.parseMCodeHeader = parseMCodeHeader;
+    window.parseWpcShiftHeader = parseWpcShiftHeader;
+    window.parseIndexingHeader = parseIndexingHeader;
     window.parseSubProgramHeader = parseSubProgramHeader;
     window.parseEndProgramHeader = parseEndProgramHeader;
     window.parseChamferOutHeader = parseChamferOutHeader;
@@ -2655,6 +2839,57 @@
       return `<section class="mz-unit">${renderMzTable(headers, [row], "unit-head")}${renderSlotTools(unit)}${renderSlotGeometry(unit)}</section>`;
     }
 
+    function renderPalletChangeUnit(unit) {
+      const block = blockFor(unit, "G381") || unit.blocks[0];
+      const header = unit.palletChangeHeader || block?.palletChangeHeader || parsePalletChangeHeader(block);
+      const headers = ["UNo.", "UNIT", "PALLET No.", ""].map(label => ({ label }));
+      const row = [
+        mzCell(unit.number, "row-no"), mzCell(header.unitName, "op"),
+        mzCell(header.palletNumber), mzCell("")
+      ];
+      return `<section class="mz-unit">${renderMzTable(headers, [row], "unit-head")}</section>`;
+    }
+
+    function renderMCodeUnit(unit) {
+      const block = blockFor(unit, "G302") || unit.blocks[0];
+      const header = unit.mCodeHeader || block?.mCodeHeader || parseMCodeHeader(block);
+      const headers = ["UNo.", "UNIT", "No.", "", "M1", "M2", "M3", "M4", "M5", "M6", "M7", "M8", "M9", "M10", "M11", "M12", ""]
+        .map(label => ({ label }));
+      const row = [
+        mzCell(unit.number, "row-no"), mzCell(header.unitName, "op"),
+        mzCell(header.priority, header.priorityIsLate ? "magenta" : "priority"),
+        mzCell(""), ...header.mCodes.map(code => mzCell(code)), mzCell("")
+      ];
+      return `<section class="mz-unit">${renderMzTable(headers, [row], "unit-head")}</section>`;
+    }
+
+    function renderWpcShiftUnit(unit) {
+      const block = blockFor(unit, "G306") || unit.blocks[0];
+      const header = unit.wpcShiftHeader || block?.wpcShiftHeader || parseWpcShiftHeader(block);
+      const headers = [
+        { label: "UNo." }, { label: "UNIT", colspan: 2 }, { label: "ADD. WPC" },
+        { label: "X" }, { label: "Y" }, { label: "th" }, { label: "Z" }, { label: "" }, { label: "" }
+      ];
+      const row = [
+        mzCell(unit.number, "row-no"), mzCell(header.unitName, "op"), mzCell(header.wpcNumber),
+        mzCell(header.additionalWpc),
+        mzCell(header.x), mzCell(header.y), mzCell(header.theta), mzCell(header.z), mzCell(""), mzCell("")
+      ];
+      return `<section class="mz-unit">${renderMzTable(headers, [row], "unit-head")}</section>`;
+    }
+
+    function renderIndexingUnit(unit) {
+      const block = blockFor(unit, "G382") || unit.blocks[0];
+      const header = unit.indexingHeader || block?.indexingHeader || parseIndexingHeader(block);
+      const headers = ["UNo.", "UNIT", "TURN POS X", "TURN POS Y", "TURN POS Z", "ANGLE", "TURN DIR.", ""].map(label => ({ label }));
+      const row = [
+        mzCell(unit.number, "row-no"), mzCell(header.unitName, "op"),
+        mzCell(header.turnPositionX), mzCell(header.turnPositionY), mzCell(header.turnPositionZ),
+        mzCell(header.angle), mzCell(header.turnDirection, "op"), mzCell("")
+      ];
+      return `<section class="mz-unit">${renderMzTable(headers, [row], "unit-head")}</section>`;
+    }
+
     function renderSubProgramUnit(unit) {
       const block = blockFor(unit, "G303") || unit.blocks[0];
       const header = unit.subProgramHeader || block?.subProgramHeader || parseSubProgramHeader(block);
@@ -2890,10 +3125,14 @@
 
     function classifyUnit(unit) {
       if (blockFor(unit, "G301")) return "endProgram";
+      if (blockFor(unit, "G302")) return "mCode";
       if (blockFor(unit, "G303")) return "subProgram";
       if (blockFor(unit, "G305")) return "manual";
+      if (blockFor(unit, "G306")) return "wpcShift";
       if (blockFor(unit, "G300")) return "initialSetup";
       if (blockFor(unit, "G380")) return "offset";
+      if (blockFor(unit, "G381")) return "palletChange";
+      if (blockFor(unit, "G382")) return "indexing";
       if (blockFor(unit, "G371")) return "faceMill";
       if (blockFor(unit, "G350")) return "drilling";
       if (blockFor(unit, "G359")) return "nonThroughBoring";
@@ -2910,7 +3149,11 @@
     function renderUnitMarkup(unit) {
       const unitRenderers = {
         endProgram: renderEndProgramUnit,
+        mCode: renderMCodeUnit,
         subProgram: renderSubProgramUnit,
+        wpcShift: renderWpcShiftUnit,
+        palletChange: renderPalletChangeUnit,
+        indexing: renderIndexingUnit,
         manual: renderManualUnit,
         initialSetup: renderInitialSetup,
         offset: renderOffsetUnit,
@@ -2934,7 +3177,7 @@
     function renderProgramMarkup(program) {
       const tables = program.units.map(renderUnitMarkup).join("");
       const order = program.executionOrder.filter(item => item.sequence && item.command.startsWith("N"));
-      const formatLabel = program.convertedFromPbm ? " · PBM → PAM VIEW" : "";
+      const formatLabel = program.convertedFromBinary ? ` · ${escapeHtml(program.sourceFormat)} → PAM VIEW` : "";
       return `<div class="program-banner">
         <div><span class="label">FILE </span><span class="value">${escapeHtml(program.sourceFileName || "PAM PROGRAM")}${formatLabel}</span></div>
         <div><span class="label">PROGRAM </span><span class="value">${escapeHtml(program.header.programNumber || "UNKNOWN")}</span></div>
@@ -3027,7 +3270,7 @@
         activeProgramIndex = 0;
         programFileTabs.innerHTML = "";
         programFileTabs.hidden = true;
-        viewer.innerHTML = '<div class="empty">UPLOAD A .PAM OR .PBM FILE TO BEGIN</div>';
+        viewer.innerHTML = '<div class="empty">UPLOAD A .PAM, .PBM, OR .PBD FILE TO BEGIN</div>';
         renderToolSummary([]);
         viewTabs.hidden = true;
         activateView("program");
@@ -3128,7 +3371,7 @@
 
     function syncSourceText() {
       source.value = loadedDocuments.map(document => {
-        const note = document.convertedFromPbm ? " · VIEWER-CONVERTED PBM → PAM" : "";
+        const note = document.convertedFromBinary ? ` · VIEWER-CONVERTED ${document.sourceFormat} → PAM` : "";
         return `===== ${document.name}${note} =====\n${document.text}`;
       }).join("\n\n");
     }
@@ -3145,8 +3388,11 @@
         programs,
         toolSummary: combinedToolSummary
       }, null, 2);
-      const convertedCount = programs.filter(program => program.convertedFromPbm).length;
-      const convertedStatus = convertedCount ? ` · ${convertedCount} PBM CONVERTED` : "";
+      const convertedFormats = programs.filter(program => program.convertedFromBinary).reduce((counts, program) => {
+        counts[program.sourceFormat] = (counts[program.sourceFormat] || 0) + 1;
+        return counts;
+      }, {});
+      const convertedStatus = Object.entries(convertedFormats).map(([format, count]) => ` · ${count} ${format} CONVERTED`).join("");
       status.textContent = `${programs.length} PROGRAM${programs.length === 1 ? "" : "S"} · ${totals.units} UNITS · ${totals.sequences} SEQUENCES${convertedStatus}`;
     }
 
@@ -3154,7 +3400,7 @@
       error.textContent = "";
       const documentsToParse = documents.length ? documents : (source.value.trim() ? [{ name: "PAM PROGRAM", text: source.value }] : []);
       if (!documentsToParse.length) {
-        error.textContent = "Load one or more PAM or PBM files first.";
+        error.textContent = "Load one or more PAM, PBM, or PBD files first.";
         status.textContent = "NO DATA";
         return;
       }
@@ -3164,7 +3410,8 @@
           program.sourceFileName = document.name;
           program.documentId = document.id;
           program.sourceFormat = document.sourceFormat || "PAM";
-          program.convertedFromPbm = Boolean(document.convertedFromPbm);
+          program.convertedFromBinary = Boolean(document.convertedFromBinary);
+          program.convertedFromPbm = program.sourceFormat === "PBM" && program.convertedFromBinary;
           program.toolSummary = buildToolSummary(program);
           return program;
         });
@@ -3181,25 +3428,27 @@
     function readProgramFile(file) {
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
-        const isPbm = /\.pbm$/i.test(file.name);
+        const isMazatrolBinary = /\.(?:pbm|pbd)$/i.test(file.name);
         reader.onload = () => {
           try {
-            if (isPbm) {
+            if (isMazatrolBinary) {
+              const profile = detectMazatrolBinaryProfile(reader.result, file.name);
               resolve({
                 name: file.name,
-                text: convertPbmToPam(reader.result, file.name),
-                sourceFormat: "PBM",
-                convertedFromPbm: true
+                text: convertMazatrolBinaryToPam(reader.result, file.name),
+                sourceFormat: profile.sourceFormat,
+                binaryVariant: profile.variant,
+                convertedFromBinary: true
               });
             } else {
-              resolve({ name: file.name, text: String(reader.result), sourceFormat: "PAM", convertedFromPbm: false });
+              resolve({ name: file.name, text: String(reader.result), sourceFormat: "PAM", convertedFromBinary: false });
             }
           } catch (problem) {
             reject(new Error(`${file.name}: ${problem.message}`));
           }
         };
         reader.onerror = () => reject(new Error(`${file.name} could not be read.`));
-        if (isPbm) reader.readAsArrayBuffer(file);
+        if (isMazatrolBinary) reader.readAsArrayBuffer(file);
         else reader.readAsText(file);
       });
     }
