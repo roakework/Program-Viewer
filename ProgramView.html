@@ -335,6 +335,10 @@
       return [...new TextEncoder().encode(text)].map(value => value.toString(16).padStart(2, "0").toUpperCase()).join("");
     }
 
+    function pbmBytesHex(bytes) {
+      return [...bytes].map(value => value.toString(16).padStart(2, "0").toUpperCase()).join("");
+    }
+
     function pbmFixed(view, base, offset, scale = PBM_FIXED_SCALE) {
       return view.getInt32(base + offset, true) / scale;
     }
@@ -416,6 +420,12 @@
           meta = { ...meta, a, b, d, v };
           break;
         }
+        case 0x29:
+          // G359: non-through-hole boring.
+          // D = DIA, H = DEPTH, C = CHMF, I = BTM, J = WAL, E = PRE-DIA.
+          command = `G359U${unit}D${f(36)}H${f(40)}C${f(44)}I${record[9]}J${record[10]}E${f(48)}Q0&E0(PBM-RECORD-0X29:${pbmBytesHex(record)})`;
+          meta.preservedBinaryRecord = true;
+          break;
         case 0x40: command = `G362U${unit}H${f(36)}Z${f(40)}R${f(44)}F${record[16] || 1}&Z${f(52)}A00000000Q0&E0`; break;
         case 0x52: command = `G369U${unit}H${f(36)}I${f(40)}J${f(44)}C${f(48)}A00000000Q0B0&E0`; break;
         case 0x60: command = `G371U${unit}H${f(36)}Z${f(40)}I${record[9] || 1}&Z${f(44)}Q0&E0`; break;
@@ -550,7 +560,7 @@
         section = kind;
       }
 
-      const unitTypes = new Set([0x03, 0x04, 0x05, 0x06, 0x20, 0x23, 0x24, 0x26, 0x27, 0x40, 0x52, 0x60, 0x66]);
+      const unitTypes = new Set([0x03, 0x04, 0x05, 0x06, 0x20, 0x23, 0x24, 0x26, 0x27, 0x29, 0x40, 0x52, 0x60, 0x66]);
       const recordCount = (arrayBuffer.byteLength - PBM_HEADER_SIZE) / PBM_RECORD_SIZE;
       for (let index = 0; index < recordCount; index += 1) {
         const base = PBM_HEADER_SIZE + index * PBM_RECORD_SIZE;
@@ -660,6 +670,7 @@
         G353: "Reaming",
         G354: "Tapping",
         G356: "Circle Mill",
+        G359: "Non-Through Boring",
         G362: "Line Center",
         G369: "Chamfer Out",
         G377: "Slot",
@@ -747,6 +758,10 @@
         },
         circleMill: {
           commands: ["G356"],
+          fields: {}
+        },
+        nonThroughBoring: {
+          commands: ["G359"],
           fields: {}
         },
         chamferOut: {
@@ -1179,6 +1194,39 @@
       };
     }
 
+    // G359 Non-through-hole boring rules.
+    function parseNonThroughBoringHeader(block) {
+      return {
+        unitName: "BORE S1",
+        diameter: drillingValue(block, "D", 0),
+        depth: drillingValue(block, "H", 0),
+        chamfer: drillingValue(block, "C", 0),
+        bottom: drillingValue(block, "I", 0),
+        wall: drillingValue(block, "J", 0),
+        preDiameter: drillingValue(block, "E", 0),
+        raw: block.raw
+      };
+    }
+
+    function boringDisplayDepth(value) {
+      const number = Number(value);
+      if (!Number.isFinite(number)) return value;
+      return number.toFixed(3).replace(/0+$/, "").replace(/\.$/, ".");
+    }
+
+    function parseNonThroughBoringToolRow(block) {
+      const row = parseDrillingToolRow(block);
+      return {
+        ...row,
+        toolName: block.comments[0] || "BOR BAR",
+        preDiameter: "CYCLE1",
+        preDepth: drillingValue(block, "H", 1) || "0.",
+        rough: "1",
+        depthAddress: "T",
+        depth: boringDisplayDepth(drillingValue(block, "Z", 0))
+      };
+    }
+
     // G353 Reaming rules. Isolated so existing Unit types remain unchanged.
     function reamingValue(block, key, occurrence = 0) {
       const parameter = manualParameter(block, key, occurrence);
@@ -1583,6 +1631,15 @@
       if (unitType === "drilling" && /^N\d+$/i.test(block.command) && context.sectionCommand === "G420") {
         block.drillingGeometryRow = parseDrillingGeometryRow(block);
       }
+      if (unitType === "nonThroughBoring" && block.command === "G359") {
+        block.nonThroughBoringHeader = parseNonThroughBoringHeader(block);
+      }
+      if (unitType === "nonThroughBoring" && /^N\d+$/i.test(block.command) && context.sectionCommand === "G424") {
+        block.drillingToolRow = parseNonThroughBoringToolRow(block);
+      }
+      if (unitType === "nonThroughBoring" && /^N\d+$/i.test(block.command) && context.sectionCommand === "G420") {
+        block.drillingGeometryRow = parseDrillingGeometryRow(block);
+      }
       if (unitType === "reaming" && block.command === "G353") {
         block.reamingHeader = parseReamingHeader(block);
       }
@@ -1678,6 +1735,7 @@
               drillTapHeader: block.drillTapHeader || null,
               circleMillHeader: block.circleMillHeader || null,
               drillingHeader: block.drillingHeader || null,
+              nonThroughBoringHeader: block.nonThroughBoringHeader || null,
               reamingHeader: block.reamingHeader || null,
               tappingHeader: block.tappingHeader || null,
               lineCenterHeader: block.lineCenterHeader || null,
@@ -1701,6 +1759,7 @@
           if (block.drillTapHeader) currentUnit.drillTapHeader = block.drillTapHeader;
           if (block.circleMillHeader) currentUnit.circleMillHeader = block.circleMillHeader;
           if (block.drillingHeader) currentUnit.drillingHeader = block.drillingHeader;
+          if (block.nonThroughBoringHeader) currentUnit.nonThroughBoringHeader = block.nonThroughBoringHeader;
           if (block.reamingHeader) currentUnit.reamingHeader = block.reamingHeader;
           if (block.tappingHeader) currentUnit.tappingHeader = block.tappingHeader;
           if (block.lineCenterHeader) currentUnit.lineCenterHeader = block.lineCenterHeader;
@@ -1841,6 +1900,8 @@
     window.parseDrillingHeader = parseDrillingHeader;
     window.parseDrillingToolRow = parseDrillingToolRow;
     window.parseDrillingGeometryRow = parseDrillingGeometryRow;
+    window.parseNonThroughBoringHeader = parseNonThroughBoringHeader;
+    window.parseNonThroughBoringToolRow = parseNonThroughBoringToolRow;
     window.parseReamingHeader = parseReamingHeader;
     window.parseReamingToolRow = parseReamingToolRow;
     window.parseReamingGeometryRow = parseReamingGeometryRow;
@@ -2202,9 +2263,13 @@
       return { value: value ?? "", className, title };
     }
 
+    function mzHtmlCell(html, className = "", title = "") {
+      return { html, className, title };
+    }
+
     function renderMzTable(headers, rows, headClass) {
       const head = headers.map(header => `<th class="${escapeHtml(header.className || "")}"${header.colspan ? ` colspan="${header.colspan}"` : ""}>${escapeHtml(header.label)}</th>`).join("");
-      const body = rows.map(row => `<tr>${row.map(cell => `<td class="${escapeHtml(cell.className || "")}"${cell.colspan ? ` colspan="${cell.colspan}"` : ""}${cell.title ? ` title="${escapeHtml(cell.title)}"` : ""}>${escapeHtml(cell.value)}</td>`).join("")}</tr>`).join("");
+      const body = rows.map(row => `<tr>${row.map(cell => `<td class="${escapeHtml(cell.className || "")}"${cell.colspan ? ` colspan="${cell.colspan}"` : ""}${cell.title ? ` title="${escapeHtml(cell.title)}"` : ""}>${cell.html !== undefined ? cell.html : escapeHtml(cell.value)}</td>`).join("")}</tr>`).join("");
       return `<table class="mz-table"><thead><tr class="${headClass}">${head}</tr></thead><tbody>${body}</tbody></table>`;
     }
 
@@ -2367,11 +2432,15 @@
       const rows = sequences.map(sequence => {
         const block = sequence.blocks[0];
         const row = sequence.drillingToolRow || block.drillingToolRow || parseDrillingToolRow(block);
+        const roughClass = row.rough === "PCK2" ? "magenta" : ["PCK1", "DRIL"].includes(row.rough) ? "op" : "";
+        const depthCell = row.toolName === "BOR BAR"
+          ? mzHtmlCell(`<span class="green">${escapeHtml(row.depthAddress)}</span> ${escapeHtml(row.depth)}`, "left")
+          : mzCell(`${row.depthAddress} ${row.depth}`, "left");
         return [
           mzCell(row.sequenceNumber, "row-no"), mzCell(row.toolName, "op", `Tool No. ${row.toolNumber ?? ""}`),
           mzCell(row.nominalDiameter), mzCell(row.toolFlag, "green"), mzCell(row.priority, row.priorityIsLate ? "magenta" : "priority", "Execution priority"),
-          mzCell(row.holeDiameter), mzCell(row.holeDepth), mzCell(row.preDiameter), mzCell(row.preDepth),
-          mzCell(row.rough, row.rough === "PCK2" ? "magenta" : "op"), mzCell(`${row.depthAddress} ${row.depth}`, "left"), mzCell(row.peckDepth, "diamond"),
+          mzCell(row.holeDiameter), mzCell(row.holeDepth), mzCell(row.preDiameter, row.preDiameter === "CYCLE1" ? "green" : ""), mzCell(row.preDepth),
+          mzCell(row.rough, roughClass), depthCell, mzCell(row.peckDepth, "diamond"),
           mzCell(row.cuttingSpeed), mzCell(row.feedRate), ...row.mCodes.map(code => mzCell(code))
         ];
       });
@@ -2395,6 +2464,18 @@
       const header = unit.drillingHeader || cycle?.drillingHeader || parseDrillingHeader(cycle);
       const headers = ["Unit No.", "UNIT", "", "DIA", "DEPTH", "CHMF"].map(label => ({ label }));
       const row = [mzCell(unit.number, "row-no"), mzCell(header.unitName, "op"), mzCell(""), mzCell(header.diameter), mzCell(header.depth), mzCell(header.chamfer)];
+      return `<section class="mz-unit">${renderMzTable(headers, [row], "unit-head")}${renderDrillingTools(unit)}${renderDrillingGeometry(unit)}</section>`;
+    }
+
+    function renderNonThroughBoringUnit(unit) {
+      const cycle = blockFor(unit, "G359") || unit.blocks[0];
+      const header = unit.nonThroughBoringHeader || cycle?.nonThroughBoringHeader || parseNonThroughBoringHeader(cycle);
+      const headers = ["UNo.", "UNIT", "", "DIA", "DEPTH", "CHMF", "BTM", "WAL", "PRE-DIA"].map(label => ({ label }));
+      const row = [
+        mzCell(unit.number, "row-no"), mzCell(header.unitName, "op"), mzCell(""),
+        mzCell(header.diameter), mzCell(header.depth), mzCell(header.chamfer),
+        mzCell(header.bottom), mzCell(header.wall), mzCell(header.preDiameter)
+      ];
       return `<section class="mz-unit">${renderMzTable(headers, [row], "unit-head")}${renderDrillingTools(unit)}${renderDrillingGeometry(unit)}</section>`;
     }
 
@@ -2815,6 +2896,7 @@
       if (blockFor(unit, "G380")) return "offset";
       if (blockFor(unit, "G371")) return "faceMill";
       if (blockFor(unit, "G350")) return "drilling";
+      if (blockFor(unit, "G359")) return "nonThroughBoring";
       if (blockFor(unit, "G353")) return "reaming";
       if (blockFor(unit, "G354")) return "tapping";
       if (blockFor(unit, "G362")) return "lineCenter";
@@ -2834,6 +2916,7 @@
         offset: renderOffsetUnit,
         faceMill: renderFaceMillUnit,
         drilling: renderDrillingUnit,
+        nonThroughBoring: renderNonThroughBoringUnit,
         reaming: renderReamingUnit,
         tapping: renderTappingUnit,
         lineCenter: renderLineCenterUnit,
