@@ -239,6 +239,36 @@
     .tool-units { color: var(--cyan); white-space: nowrap; }
     .tool-callout-table { min-width: 760px; }
     .program-document + .program-document { margin-top: 22px; border-top: 3px solid var(--cyan); }
+    .dbm-view { margin-top: 14px; overflow: hidden; border: 1px solid #7b7b7b; background: #e8e8e8; color: #1d2732; font-family: "Arial Narrow", "Roboto Condensed", Arial, sans-serif; }
+    .dbm-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 10px 12px 6px; background: #e8e8e8; }
+    .dbm-magazine-label { min-width: 195px; padding: 1px 20px; border: 1px solid #111; border-radius: 8px; color: #001629; background: #ededed; text-align: center; font-size: 1.12rem; }
+    .dbm-file-name { color: #33465a; font-size: .82rem; }
+    .dbm-table-wrap { max-height: calc(100vh - 220px); overflow: auto; padding: 0 8px 10px; background: #e8e8e8; }
+    .dbm-table { width: 100%; min-width: 920px; border-collapse: separate; border-spacing: 0; table-layout: fixed; font-size: 1.08rem; }
+    .dbm-table th { position: sticky; top: 0; z-index: 2; height: 41px; padding: 3px 8px; border-top: 1px solid #111; border-right: 1px solid #111; border-bottom: 3px double #555; color: #34404c; background: #e8e8e8; text-align: left; vertical-align: bottom; font-size: .78rem; font-weight: 400; }
+    .dbm-table th:first-child { border-left: 1px solid #111; }
+    .dbm-table td { height: 44px; padding: 3px 9px; color: #3c4148; background: #f3f3f3; border: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .dbm-table tr:nth-child(even) td { background: #e6e7f2; }
+    .dbm-table tr.selected td { color: #fff; background: #11bdea; }
+    .dbm-table .dbm-number { width: 74px; padding-left: 12px; text-align: center; }
+    .dbm-table .dbm-tool { width: 190px; }
+    .dbm-table .dbm-nominal { width: 168px; text-align: center; }
+    .dbm-table .dbm-status { width: 82px; }
+    .dbm-table .dbm-length { width: 135px; text-align: center; }
+    .dbm-table .dbm-actual { width: 165px; text-align: center; }
+    .dbm-table .dbm-wear { width: 210px; text-align: center; }
+    .dbm-tool-name { display: flex; align-items: center; gap: 11px; }
+    .dbm-tool-icon { position: relative; flex: 0 0 76px; width: 76px; height: 34px; }
+    .dbm-tool-icon::before { content: ""; position: absolute; left: 0; top: 4px; width: 42px; height: 26px; border: 1px solid #2c333b; background: linear-gradient(90deg, #555 0 22%, #b9c0c8 23% 38%, #555 39% 46%, #d9dee3 47% 60%, #777 61%); }
+    .dbm-tool-icon::after { content: ""; position: absolute; left: 42px; top: 12px; width: 33px; height: 10px; background: repeating-linear-gradient(135deg, #e9e000 0 5px, #7d8300 6px 8px); clip-path: polygon(0 15%, 88% 15%, 100% 50%, 88% 85%, 0 85%); }
+    .dbm-tool-icon.tap::after { height: 8px; top: 13px; background: repeating-linear-gradient(90deg, #c4a900 0 3px, #5d5d00 4px 5px); }
+    .dbm-tool-icon.face::after { top: 5px; width: 32px; height: 25px; background: linear-gradient(90deg, #7296a8, #dce3e7 45%, #51788c); clip-path: polygon(0 0, 100% 18%, 100% 82%, 0 100%); }
+    .dbm-tool-icon.sensor::after { background: #8c8c8c; }
+    .dbm-tool-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+    .dbm-suffix { padding-left: 4px; color: #00a030; }
+    .dbm-suffix.warning { color: #ed0037; }
+    .dbm-diamond { color: #000; font-size: 1.2rem; }
+    .dbm-empty { padding: 36px; color: #47606d; text-align: center; }
 
     details { margin-top: 14px; border: 1px solid var(--line); background: var(--panel); }
     summary { padding: 10px 12px; color: var(--cyan); cursor: pointer; }
@@ -248,6 +278,7 @@
       .workbench { grid-template-columns: 1fr; }
       textarea { min-height: 230px; }
       .program-banner { grid-template-columns: 1fr; gap: 5px; }
+      .dbm-table-wrap { max-height: none; }
     }
   </style>
 </head>
@@ -264,6 +295,7 @@
     <nav class="view-tabs" id="viewTabs" aria-label="Application views" hidden>
       <button class="view-tab active" id="programTabButton" type="button" data-view="program">PROGRAM VIEW</button>
       <button class="view-tab" id="toolsTabButton" type="button" data-view="tools">TOOL USAGE</button>
+      <button class="view-tab" id="toolDataTabButton" type="button" data-view="tool-data">TOOL DATA</button>
     </nav>
 
     <div id="programView">
@@ -272,10 +304,10 @@
         <div class="panel-title">PAM INPUT</div>
         <div class="input-body">
           <label class="drop-zone" id="dropZone" for="fileInput">
-            LOAD .PAM / .PBM / .PBD / .TXT FILES
-            <small>Click or drag all face programs here · PBM/PBD is converted for viewer use</small>
+            LOAD PROGRAM OR TOOL DATA FILES
+            <small>.PAM · .PBM · .PBD · .TXT · .DBM</small>
           </label>
-          <input id="fileInput" type="file" accept=".pam,.pbm,.pbd,.txt,text/plain,application/octet-stream" multiple>
+          <input id="fileInput" type="file" accept=".pam,.pbm,.pbd,.dbm,.txt,text/plain,application/octet-stream" multiple>
           <textarea id="source" spellcheck="false" aria-label="Raw PAM data" placeholder="Uploaded PAM programs will appear here" readonly></textarea>
           <div class="error" id="error" role="alert"></div>
         </div>
@@ -301,6 +333,16 @@
         <button class="excel-export-button" id="exportToolUsageButton" type="button" disabled>EXPORT TO EXCEL</button>
       </div>
       <div class="tool-summary-wrap" id="toolSummary"></div>
+    </section>
+
+    <section class="dbm-view" id="toolDataView" hidden>
+      <div class="dbm-toolbar">
+        <span class="dbm-magazine-label">MAGAZINE</span>
+        <span class="dbm-file-name" id="toolDataFileName">NO DBM LOADED</span>
+      </div>
+      <div class="dbm-table-wrap" id="toolDataTable">
+        <div class="dbm-empty">UPLOAD TOOLDATA.DBM TO VIEW THE MACHINE MAGAZINE</div>
+      </div>
     </section>
 
     <div class="unit-preview-overlay" id="unitPreviewOverlay" role="dialog" aria-modal="true" aria-labelledby="unitPreviewTitle" hidden>
@@ -681,6 +723,123 @@
     window.convertMazatrolBinaryToPam = convertMazatrolBinaryToPam;
     window.convertPbmToPam = convertPbmToPam;
     // ---------- End PBM/PBD import adapter ----------
+
+    // ---------- DBM tool-data adapter ----------
+    const DBM_TOOL_COUNT = 80;
+    const DBM_TOOL_RECORD_SIZE = 384;
+    const DBM_TRAILER_SIZE = 4;
+    const DBM_INCH_SCALE = 25400000;
+    const DBM_TOOL_TYPES = Object.freeze({
+      1: "CTR-DR", 2: "DRILL", 3: "REAMER", 4: "TAP", 5: "TAP",
+      6: "TAP", 7: "TAP", 8: "TAP", 9: "TAP", 10: "BCK FACE",
+      11: "BOR BAR", 12: "B-B BAR", 13: "CHAMFER", 14: "FCE MILL",
+      15: "END MILL", 16: "OTHER", 17: "CHIP VAC", 18: "T. SENS.",
+      19: "BAL EMIL"
+    });
+    const DBM_SUFFIXES = Object.freeze({
+      1: "A", 2: "B", 3: "C", 4: "D", 5: "E", 6: "F",
+      7: "G", 8: "H", 9: "J", 10: "K", 11: "L", 12: "M",
+      13: "N", 14: "P", 15: "Q", 16: "R", 17: "S", 18: "T",
+      19: "U", 20: "V", 21: "W", 22: "X", 23: "Y", 24: "Z"
+    });
+
+    function dbmAscii(bytes, offset, length) {
+      let text = "";
+      for (let index = offset; index < Math.min(bytes.length, offset + length); index += 1) {
+        const value = bytes[index];
+        if (!value) break;
+        if (value >= 32 && value <= 126) text += String.fromCharCode(value);
+      }
+      return text.trim();
+    }
+
+    function formatDbmInches(rawValue) {
+      let value = rawValue / DBM_INCH_SCALE;
+      if (!Number.isFinite(value) || Object.is(value, -0)) value = 0;
+      const rounded = Math.round(value * 100000) / 100000;
+      if (Number.isInteger(rounded)) return `${rounded}.`;
+      return rounded.toFixed(5).replace(/0+$/, "");
+    }
+
+    function decodeDbmTapCallout(record, suffix) {
+      const threadType = record[24];
+      const fractionCode = record[25];
+      const nominal = record[26];
+      const pitch = record[27];
+      const threadLabels = { 1: "M", 2: "UNn", 3: "UN", 4: "PT", 5: "PF", 6: "PS", 7: "OTHER" };
+      const fractions = { 1: "H", 2: "Q", 3: "E", 4: "S" };
+      const label = threadLabels[threadType] || "TAP";
+      if (threadType === 1) {
+        const metricNominal = nominal >= 100 ? nominal / 10 : nominal;
+        return `${label} ${metricNominal}${pitch ? `-${pitch}` : ""}${suffix}`.trim();
+      }
+      const nominalText = `${nominal || ""}${fractions[fractionCode] || ""}`;
+      return `${label} ${nominalText}${pitch ? `-${pitch}` : ""}${suffix}`.trim();
+    }
+
+    function detectDbmToolSection(arrayBuffer) {
+      const minimumSize = DBM_TOOL_COUNT * DBM_TOOL_RECORD_SIZE + DBM_TRAILER_SIZE;
+      if (!arrayBuffer || arrayBuffer.byteLength < minimumSize) throw new Error("DBM file is too small to contain Mazak magazine tool data.");
+      const start = arrayBuffer.byteLength - minimumSize;
+      const view = new DataView(arrayBuffer);
+      let plausibleRecords = 0;
+      for (let index = 0; index < DBM_TOOL_COUNT; index += 1) {
+        const base = start + index * DBM_TOOL_RECORD_SIZE;
+        const shape = view.getUint16(base + 12, true);
+        if (shape >= 0 && shape <= 19) plausibleRecords += 1;
+      }
+      if (plausibleRecords < 70) throw new Error("DBM tool-record layout is not recognized.");
+      return start;
+    }
+
+    function decodeDbmToolData(arrayBuffer, fileName = "TOOLDATA.DBM") {
+      const bytes = new Uint8Array(arrayBuffer);
+      const view = new DataView(arrayBuffer);
+      const start = detectDbmToolSection(arrayBuffer);
+      const tools = [];
+      for (let index = 0; index < DBM_TOOL_COUNT; index += 1) {
+        const base = start + index * DBM_TOOL_RECORD_SIZE;
+        const record = bytes.subarray(base, base + DBM_TOOL_RECORD_SIZE);
+        const shapeCode = view.getUint16(base + 12, true);
+        const suffixRaw = view.getUint16(base + 14, true);
+        const suffixCode = suffixRaw & 0xff;
+        const suffix = DBM_SUFFIXES[suffixCode] || "";
+        const nominalRaw = view.getInt32(base + 24, true);
+        const actualRaw = view.getInt32(base + 28, true);
+        const lengthRaw = view.getInt32(base + 32, true);
+        const wearRaw = view.getInt32(base + 140, true);
+        const occupied = shapeCode > 0 || nominalRaw !== 0 || lengthRaw !== 0;
+        const isTap = shapeCode >= 4 && shapeCode <= 9;
+        tools.push({
+          toolNumber: index + 1,
+          occupied,
+          toolTypeCode: shapeCode,
+          toolType: occupied ? (DBM_TOOL_TYPES[shapeCode] || `TOOL ${shapeCode}`) : "",
+          suffix: isTap ? "" : suffix,
+          suffixWarning: !isTap && Boolean(suffixRaw & 0x8000),
+          nominal: occupied ? (isTap ? decodeDbmTapCallout(record, suffix) : formatDbmInches(nominalRaw)) : "",
+          length: occupied ? formatDbmInches(lengthRaw) : "",
+          actualDiameter: occupied && actualRaw ? formatDbmInches(actualRaw) : "♦",
+          wearZ: occupied ? formatDbmInches(wearRaw) : "",
+          status: "",
+          material: dbmAscii(bytes, base + 64, 32),
+          iconClass: shapeCode === 14 ? "face" : isTap ? "tap" : shapeCode === 18 ? "sensor" : ""
+        });
+      }
+      return {
+        fileName,
+        format: "Mazak DBM Tool Data",
+        recordStart: start,
+        recordSize: DBM_TOOL_RECORD_SIZE,
+        slotCount: DBM_TOOL_COUNT,
+        occupiedCount: tools.filter(tool => tool.occupied).length,
+        tools
+      };
+    }
+
+    window.detectDbmToolSection = detectDbmToolSection;
+    window.decodeDbmToolData = decodeDbmToolData;
+    // ---------- End DBM tool-data adapter ----------
 
     // ---------- Feature 1: pure parser engine ----------
     function decodeHexUtf8(hex) {
@@ -2118,9 +2277,13 @@
     const programView = document.getElementById("programView");
     const programFileTabs = document.getElementById("programFileTabs");
     const toolsView = document.getElementById("toolsView");
+    const toolDataView = document.getElementById("toolDataView");
     const programTabButton = document.getElementById("programTabButton");
     const toolsTabButton = document.getElementById("toolsTabButton");
+    const toolDataTabButton = document.getElementById("toolDataTabButton");
     const toolSummary = document.getElementById("toolSummary");
+    const toolDataTable = document.getElementById("toolDataTable");
+    const toolDataFileName = document.getElementById("toolDataFileName");
     const exportToolUsageButton = document.getElementById("exportToolUsageButton");
     const unitPreviewOverlay = document.getElementById("unitPreviewOverlay");
     const unitPreviewTitle = document.getElementById("unitPreviewTitle");
@@ -2431,17 +2594,59 @@
 
     window.buildToolSummary = buildToolSummary;
 
+    function renderDbmToolData(database) {
+      if (!database) {
+        toolDataFileName.textContent = "NO DBM LOADED";
+        toolDataTable.innerHTML = '<div class="dbm-empty">UPLOAD TOOLDATA.DBM TO VIEW THE MACHINE MAGAZINE</div>';
+        return;
+      }
+      toolDataFileName.textContent = `${database.fileName} · ${database.occupiedCount} OF ${database.slotCount} SLOTS LOADED`;
+      const rows = database.tools.map((tool, index) => {
+        const selected = index === 0 && tool.occupied ? " selected" : "";
+        const icon = tool.occupied ? `<span class="dbm-tool-icon ${escapeHtml(tool.iconClass)}" aria-hidden="true"></span>` : "";
+        const suffix = tool.suffix ? `<span class="dbm-suffix${tool.suffixWarning ? " warning" : ""}">${escapeHtml(tool.suffix)}</span>` : "";
+        return `<tr class="${selected}" data-tool-number="${tool.toolNumber}">
+          <td class="dbm-number">${escapeHtml(tool.toolNumber)}</td>
+          <td class="dbm-tool"><span class="dbm-tool-name">${icon}<span class="dbm-tool-label">${escapeHtml(tool.toolType)}</span></span></td>
+          <td class="dbm-nominal">${escapeHtml(tool.nominal)}${suffix}</td>
+          <td class="dbm-status">${escapeHtml(tool.status)}</td>
+          <td class="dbm-length">${escapeHtml(tool.length)}</td>
+          <td class="dbm-actual">${tool.actualDiameter === "♦" && tool.occupied ? '<span class="dbm-diamond">♦</span>' : escapeHtml(tool.actualDiameter)}</td>
+          <td class="dbm-wear">${escapeHtml(tool.wearZ)}</td>
+        </tr>`;
+      }).join("");
+      toolDataTable.innerHTML = `<table class="dbm-table">
+        <thead><tr>
+          <th class="dbm-number">TNo.</th><th class="dbm-tool">TOOL</th><th class="dbm-nominal">NOM-Ø</th>
+          <th class="dbm-status">STAT.</th><th class="dbm-length">LENGTH</th><th class="dbm-actual">ACT-Ø</th>
+          <th class="dbm-wear">WEAR COMP.<br>Z</th>
+        </tr></thead><tbody>${rows}</tbody>
+      </table>`;
+    }
+
+    toolDataTable.addEventListener("click", event => {
+      const row = event.target.closest("tr[data-tool-number]");
+      if (!row) return;
+      toolDataTable.querySelectorAll("tr.selected").forEach(item => item.classList.remove("selected"));
+      row.classList.add("selected");
+    });
+
     function activateView(viewName) {
       const showTools = viewName === "tools";
-      programView.hidden = showTools;
+      const showToolData = viewName === "tool-data";
+      programView.hidden = showTools || showToolData;
       toolsView.hidden = !showTools;
-      programTabButton.classList.toggle("active", !showTools);
+      toolDataView.hidden = !showToolData;
+      programTabButton.classList.toggle("active", !showTools && !showToolData);
       toolsTabButton.classList.toggle("active", showTools);
+      toolDataTabButton.classList.toggle("active", showToolData);
     }
 
     programTabButton.addEventListener("click", () => activateView("program"));
     toolsTabButton.addEventListener("click", () => activateView("tools"));
+    toolDataTabButton.addEventListener("click", () => activateView("tool-data"));
     window.activateView = activateView;
+    window.renderDbmToolData = renderDbmToolData;
 
     function mzCell(value, className = "", title = "") {
       return { value: value ?? "", className, title };
@@ -3367,6 +3572,7 @@
     window.closeProgramTab = closeProgramTab;
 
     let loadedDocuments = [];
+    let loadedToolData = null;
     let nextDocumentId = 1;
 
     function syncSourceText() {
@@ -3429,11 +3635,19 @@
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
         const isMazatrolBinary = /\.(?:pbm|pbd)$/i.test(file.name);
+        const isDbm = /\.dbm$/i.test(file.name);
         reader.onload = () => {
           try {
-            if (isMazatrolBinary) {
+            if (isDbm) {
+              resolve({
+                kind: "toolData",
+                name: file.name,
+                database: decodeDbmToolData(reader.result, file.name)
+              });
+            } else if (isMazatrolBinary) {
               const profile = detectMazatrolBinaryProfile(reader.result, file.name);
               resolve({
+                kind: "program",
                 name: file.name,
                 text: convertMazatrolBinaryToPam(reader.result, file.name),
                 sourceFormat: profile.sourceFormat,
@@ -3441,14 +3655,14 @@
                 convertedFromBinary: true
               });
             } else {
-              resolve({ name: file.name, text: String(reader.result), sourceFormat: "PAM", convertedFromBinary: false });
+              resolve({ kind: "program", name: file.name, text: String(reader.result), sourceFormat: "PAM", convertedFromBinary: false });
             }
           } catch (problem) {
             reject(new Error(`${file.name}: ${problem.message}`));
           }
         };
         reader.onerror = () => reject(new Error(`${file.name} could not be read.`));
-        if (isMazatrolBinary) reader.readAsArrayBuffer(file);
+        if (isMazatrolBinary || isDbm) reader.readAsArrayBuffer(file);
         else reader.readAsText(file);
       });
     }
@@ -3457,14 +3671,26 @@
       const files = [...fileList];
       if (!files.length) return;
       error.textContent = "";
-      status.textContent = `LOADING ${files.length} PROGRAM${files.length === 1 ? "" : "S"}`;
+      status.textContent = `LOADING ${files.length} FILE${files.length === 1 ? "" : "S"}`;
       try {
-        loadedDocuments = (await Promise.all(files.map(readProgramFile))).map(document => ({
-          ...document,
-          id: `program-${nextDocumentId++}`
-        }));
-        syncSourceText();
-        runParser(loadedDocuments);
+        const results = await Promise.all(files.map(readProgramFile));
+        const programResults = results.filter(result => result.kind === "program");
+        const toolDataResults = results.filter(result => result.kind === "toolData");
+        if (programResults.length) {
+          loadedDocuments = programResults.map(document => ({
+            ...document,
+            id: `program-${nextDocumentId++}`
+          }));
+          syncSourceText();
+          runParser(loadedDocuments);
+        }
+        if (toolDataResults.length) {
+          loadedToolData = toolDataResults[toolDataResults.length - 1].database;
+          renderDbmToolData(loadedToolData);
+          viewTabs.hidden = false;
+          status.textContent = `${loadedToolData.occupiedCount} TOOLS · ${loadedToolData.slotCount} MAGAZINE SLOTS · DBM LOADED`;
+          activateView("tool-data");
+        }
         fileInput.value = "";
       } catch (problem) {
         error.textContent = problem.message;
