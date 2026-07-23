@@ -505,6 +505,11 @@
           meta.preservedBinaryRecord = true;
           break;
         case 0x40: command = `G362U${unit}H${f(36)}Z${f(40)}R${f(44)}F${record[16] || 1}&Z${f(52)}A00000000Q0&E0`; break;
+        case 0x42:
+          // LINE LFT header used by this PBD machine generation.
+          command = `G362U${unit}H${f(36)}Z${f(40)}R${f(44)}F${record[17] || 1}&Z${f(48)}&R${f(52)}A0B0J${f(56)}C${f(60)}L1Q0&E0`;
+          meta.binaryVariant = "line-left-0x42";
+          break;
         case 0x52: command = `G369U${unit}H${f(36)}I${f(40)}J${f(44)}C${f(48)}A00000000Q0B0&E0`; break;
         case 0x60: command = `G371U${unit}H${f(36)}Z${f(40)}I${record[9] || 1}&Z${f(44)}Q0&E0`; break;
         case 0x66: command = `G377U${unit}H${f(36)}Z${f(40)}D${f(60)}I${record[9]}J${record[10]}&Z${f(52)}&R${f(56)}F0Q0P0&E0`; break;
@@ -513,13 +518,15 @@
       return { command, meta };
     }
 
-    function decodePbmToolRow(type, record, view, base, parent) {
+    function decodePbmToolRow(type, record, view, base, parent, profile) {
       const n = pbmSequence(record, view, base);
       const tool = record[9];
       const speed = pbmSpeed(record);
       const priority = pbmPriority(record, view, base);
       const f = offset => pbmNumber(pbmFixed(view, base, offset));
-      const spindle = offset => pbmNumber(pbmInt(view, base, offset) / 1000);
+      // PBM stores C-SP in thousandths; PBD stores the displayed whole value.
+      const spindleScale = profile?.sourceFormat === "PBM" ? 1000 : 1;
+      const spindle = offset => pbmNumber(pbmInt(view, base, offset) / spindleScale);
       const raw = offset => pbmInt(view, base, offset);
       const machines = pbmMachineCodes(record, view, base);
       const pass = record[8] & 2 ? 1 : 0;
@@ -540,6 +547,9 @@
       if (type === 0xB1) {
         if (parent.type === 0x52) {
           return `${lead}X&${f(40)}Y&${f(44)}Q${q || 7}F0.I${spindle(60)}J${f(64)}${machines}B${pass}&Q0`;
+        }
+        if (parent.type === 0x42) {
+          return `${lead}X&${f(40)}Y&${f(44)}Z${f(48)}I${spindle(60)}J${f(64)}${machines}B${pass}L1&Q0`;
         }
         return `${lead}X&${f(40)}Y&${f(44)}Z${f(48)}I${spindle(60)}J${f(64)}${machines}B${pass}&Q0`;
       }
@@ -579,6 +589,10 @@
       if (type === 0xC0) return `N${n}A1Z${f(36)}X${f(40)}Y${f(44)}F0P0Q0R0`;
       if (type === 0xC1) return `N${n}A1X${f(36)}Y${f(40)}&X${f(44)}&Y${f(48)}B0`;
       const first = record[12] ? 1 : 0;
+      if (parent.type === 0x42) {
+        const corner = pbmInt(view, base, 60) ? `R${f(60)}` : "";
+        return `N${n}A1X${f(40)}Y${f(44)}${corner}L1P0E0S${first}B1&W0`;
+      }
       if (parent.type === 0x66) {
         const a = Math.max(1, record[8] - 31);
         return `N${n}A${a}X${f(36)}Y${f(40)}V${f(44)}I${f(48)}J${f(52)}P0E0S${first}B1&W0`;
@@ -589,7 +603,7 @@
 
     const PBM_MANUAL_ADDRESS = { 0x0F: "F", 0x12: "I", 0x13: "J", 0x19: "P", 0x21: "X", 0x22: "Y", 0x23: "Z" };
 
-    function decodePbmManualRow(record, view, base) {
+    function decodePbmManualRow(record, view, base, profile) {
       const n = pbmSequence(record, view, base);
       const parts = [`N${n}`];
       const ga = view.getUint16(base + 20, true);
@@ -604,7 +618,9 @@
       }
       const spindle = pbmInt(view, base, 60);
       const machine = view.getUint16(base + 24, true);
-      if (spindle) parts.push(`SA${pbmNumber(spindle / 1000)}`);
+      // PBM stores manual spindle values in thousandths; PBD stores whole RPM.
+      const spindleScale = profile?.sourceFormat === "PBM" ? 1000 : 1;
+      if (spindle) parts.push(`SA${pbmNumber(spindle / spindleScale)}`);
       if (machine) parts.push(`MA${machine}`);
       return parts.join("");
     }
@@ -647,6 +663,25 @@
       return null;
     }
 
+    function preserveUnknownMazatrolRecord(type, record, view, base, recordIndex, profile, current) {
+      const typeHex = type.toString(16).padStart(2, "0").toUpperCase();
+      const preserved = `(UNMAPPED-${profile.sourceFormat}-RECORD-0X${typeHex}:${pbmBytesHex(record)})`;
+      const possibleUnit = view.getUint16(base + 2, true);
+      const isPossibleUnitHeader = type > 0 && type < 0xA0 && possibleUnit < 10000;
+      if (isPossibleUnitHeader) {
+        return {
+          startsUnit: true,
+          meta: { unit: possibleUnit, type, generic: true, preservedBinaryRecord: true },
+          command: `G399U${possibleUnit}A${type}R${recordIndex + 1}${preserved}`
+        };
+      }
+      return {
+        startsUnit: false,
+        meta: current,
+        command: `G399A${type}R${recordIndex + 1}${preserved}`
+      };
+    }
+
     function convertMazatrolBinaryToPam(arrayBuffer, fileName = "PROGRAM.PBM") {
       if (!arrayBuffer || typeof arrayBuffer.byteLength !== "number") throw new Error("PBM/PBD conversion requires binary file data.");
       const profile = detectMazatrolBinaryProfile(arrayBuffer, fileName);
@@ -674,7 +709,7 @@
         section = kind;
       }
 
-      const unitTypes = new Set([0x03, 0x04, 0x05, 0x06, 0x20, 0x23, 0x24, 0x26, 0x27, 0x29, 0x40, 0x52, 0x60, 0x66]);
+      const unitTypes = new Set([0x03, 0x04, 0x05, 0x06, 0x20, 0x23, 0x24, 0x26, 0x27, 0x29, 0x40, 0x42, 0x52, 0x60, 0x66]);
       const pbdMasterUnitTypes = new Set([0x02, 0x07, 0x0A, 0x0C]);
       const recordCount = (arrayBuffer.byteLength - profile.headerSize) / PBM_RECORD_SIZE;
       for (let index = 0; index < recordCount; index += 1) {
@@ -689,13 +724,13 @@
           lines.push(decoded.command);
         } else if ([0xB0, 0xB1, 0xB2].includes(type)) {
           openSection("tool");
-          lines.push(decodePbmToolRow(type, record, view, base, current));
+          lines.push(decodePbmToolRow(type, record, view, base, current, profile));
         } else if ([0xC0, 0xC1, 0xC2].includes(type)) {
           openSection("geometry");
           lines.push(decodePbmGeometryRow(type, record, view, base, current));
         } else if (type === 0xA1) {
           openSection("geometry");
-          lines.push(decodePbmManualRow(record, view, base));
+          lines.push(decodePbmManualRow(record, view, base, profile));
         } else if (type === 0xA0) {
           // PBD fixed-record files can include three auxiliary setup records
           // before Unit 1. Their values are already represented by the header.
@@ -707,7 +742,12 @@
         } else if (type === 0xD0 || type === 0xD7) {
           // Auxiliary cycle-definition records do not affect the current viewer grids.
         } else {
-          throw new Error(`Unsupported ${profile.sourceFormat} record 0x${type.toString(16).padStart(2, "0")} at record ${index + 1}.`);
+          const preserved = preserveUnknownMazatrolRecord(type, record, view, base, index, profile, current);
+          if (preserved.startsUnit) {
+            closeSection();
+            current = preserved.meta;
+          }
+          lines.push(preserved.command);
         }
       }
       closeSection();
@@ -725,9 +765,12 @@
     // ---------- End PBM/PBD import adapter ----------
 
     // ---------- DBM tool-data adapter ----------
-    const DBM_TOOL_COUNT = 80;
     const DBM_TOOL_RECORD_SIZE = 384;
     const DBM_TRAILER_SIZE = 4;
+    const DBM_TOOL_SECTION_HEADER_SIZE = 256;
+    const DBM_FIRST_SECTION_SPAN_OFFSET = 160;
+    const DBM_SECOND_SECTION_SPAN_OFFSET = 164;
+    const DBM_MAX_TOOL_COUNT = 512;
     const DBM_INCH_SCALE = 25400000;
     const DBM_TOOL_TYPES = Object.freeze({
       1: "CTR-DR", 2: "DRILL", 3: "REAMER", 4: "TAP", 5: "TAP",
@@ -778,26 +821,45 @@
     }
 
     function detectDbmToolSection(arrayBuffer) {
-      const minimumSize = DBM_TOOL_COUNT * DBM_TOOL_RECORD_SIZE + DBM_TRAILER_SIZE;
-      if (!arrayBuffer || arrayBuffer.byteLength < minimumSize) throw new Error("DBM file is too small to contain Mazak magazine tool data.");
-      const start = arrayBuffer.byteLength - minimumSize;
+      if (!arrayBuffer || arrayBuffer.byteLength < DBM_SECOND_SECTION_SPAN_OFFSET + 4) {
+        throw new Error("DBM file is too small to contain a Mazak database header.");
+      }
       const view = new DataView(arrayBuffer);
+      const firstSectionSpan = view.getUint32(DBM_FIRST_SECTION_SPAN_OFFSET, true);
+      const secondSectionSpan = view.getUint32(DBM_SECOND_SECTION_SPAN_OFFSET, true);
+      const sectionBase = firstSectionSpan + secondSectionSpan;
+      const start = sectionBase + DBM_TOOL_SECTION_HEADER_SIZE;
+      const payloadSize = arrayBuffer.byteLength - start - DBM_TRAILER_SIZE;
+      if (
+        firstSectionSpan === 0 ||
+        secondSectionSpan === 0 ||
+        start >= arrayBuffer.byteLength ||
+        payloadSize <= 0 ||
+        payloadSize % DBM_TOOL_RECORD_SIZE !== 0
+      ) {
+        throw new Error("DBM tool-section boundaries are not recognized.");
+      }
+      const slotCount = payloadSize / DBM_TOOL_RECORD_SIZE;
+      if (!Number.isInteger(slotCount) || slotCount < 1 || slotCount > DBM_MAX_TOOL_COUNT) {
+        throw new Error(`Unsupported DBM magazine capacity (${slotCount} slots).`);
+      }
       let plausibleRecords = 0;
-      for (let index = 0; index < DBM_TOOL_COUNT; index += 1) {
+      for (let index = 0; index < slotCount; index += 1) {
         const base = start + index * DBM_TOOL_RECORD_SIZE;
         const shape = view.getUint16(base + 12, true);
         if (shape >= 0 && shape <= 19) plausibleRecords += 1;
       }
-      if (plausibleRecords < 70) throw new Error("DBM tool-record layout is not recognized.");
-      return start;
+      if (plausibleRecords / slotCount < 0.9) throw new Error("DBM tool-record layout is not recognized.");
+      return { start, slotCount, sectionBase, firstSectionSpan, secondSectionSpan };
     }
 
     function decodeDbmToolData(arrayBuffer, fileName = "TOOLDATA.DBM") {
       const bytes = new Uint8Array(arrayBuffer);
       const view = new DataView(arrayBuffer);
-      const start = detectDbmToolSection(arrayBuffer);
+      const layout = detectDbmToolSection(arrayBuffer);
+      const start = layout.start;
       const tools = [];
-      for (let index = 0; index < DBM_TOOL_COUNT; index += 1) {
+      for (let index = 0; index < layout.slotCount; index += 1) {
         const base = start + index * DBM_TOOL_RECORD_SIZE;
         const record = bytes.subarray(base, base + DBM_TOOL_RECORD_SIZE);
         const shapeCode = view.getUint16(base + 12, true);
@@ -831,7 +893,7 @@
         format: "Mazak DBM Tool Data",
         recordStart: start,
         recordSize: DBM_TOOL_RECORD_SIZE,
-        slotCount: DBM_TOOL_COUNT,
+        slotCount: layout.slotCount,
         occupiedCount: tools.filter(tool => tool.occupied).length,
         tools
       };
@@ -1625,16 +1687,22 @@
     }
 
     function parseLineCenterHeader(block) {
-      const boundaryCode = manualParameter(block, "A")?.value ?? null;
+      const startCode = manualParameter(block, "A")?.value ?? null;
+      const endCode = manualParameter(block, "B")?.value ?? startCode;
+      const isLineLeft = manualParameter(block, "L")?.value === 1;
       return {
-        unitName: "LINE CTR",
+        unitName: isLineLeft ? "LINE LFT" : "LINE CTR",
+        isLineLeft,
         depth: lineCenterValue(block, "H", 0),
         serviceZ: lineCenterValue(block, "Z", 0),
         serviceRadius: lineCenterValue(block, "R", 0),
         rough: lineCenterValue(block, "F", 0),
         finishZ: lineCenterValue(block, "Z", 1),
-        start: boundaryCode === 0 ? "OPEN" : "",
-        end: boundaryCode === 0 ? "OPEN" : "",
+        finishRadius: lineCenterValue(block, "R", 1),
+        start: startCode === 0 ? "OPEN" : "",
+        end: endCode === 0 ? "OPEN" : "",
+        interRadius: lineCenterValue(block, "J", 0),
+        chamfer: lineCenterValue(block, "C", 0),
         raw: block.raw
       };
     }
@@ -1643,6 +1711,7 @@
       const toolNumber = manualParameter(block, "T")?.value ?? null;
       const sCode = manualParameter(block, "S")?.value ?? null;
       const priorityInfo = parsedPriority(block);
+      const isLineLeft = manualParameter(block, "L")?.value === 1;
       return {
         sequenceNumber: Number(block.command.slice(1)),
         toolNumber,
@@ -1656,7 +1725,7 @@
         processType: "♦",
         zfd: "G01",
         depthZ: lineCenterValue(block, "Z", 0),
-        widthR: "♦",
+        widthR: isLineLeft ? "" : "♦",
         cuttingSpeed: lineCenterValue(block, "I", 0),
         feedRate: lineCenterValue(block, "J", 0),
         mCodes: [lineCenterValue(block, "MA"), lineCenterValue(block, "MB"), lineCenterValue(block, "MC")],
@@ -2989,6 +3058,16 @@
     function renderLineCenterUnit(unit) {
       const cycle = blockFor(unit, "G362") || unit.blocks[0];
       const header = unit.lineCenterHeader || cycle?.lineCenterHeader || parseLineCenterHeader(cycle);
+      if (header.isLineLeft) {
+        const headers = ["Unit No.", "UNIT", "", "DEPTH", "SRV-Z", "SRV-R", "RGH", "FIN-Z", "FIN-R", "START", "END", "INTER-R", "CHMF"].map(label => ({ label }));
+        const row = [
+          mzCell(unit.number, "row-no"), mzCell(header.unitName, "op"), mzCell(""), mzCell(header.depth),
+          mzCell(header.serviceZ), mzCell(header.serviceRadius), mzCell(header.rough), mzCell(header.finishZ),
+          mzCell(header.finishRadius), mzCell(header.start, "left"), mzCell(header.end, "left"),
+          mzCell(header.interRadius), mzCell(header.chamfer)
+        ];
+        return `<section class="mz-unit">${renderMzTable(headers, [row], "unit-head")}${renderLineCenterTools(unit)}${renderLineCenterGeometry(unit)}</section>`;
+      }
       const headers = ["Unit No.", "UNIT", "", "DEPTH", "SRV-Z", "SRV-R", "RGH", "FIN-Z", "START", "END", ""].map(label => ({ label }));
       const row = [
         mzCell(unit.number, "row-no"), mzCell(header.unitName, "op"), mzCell(""), mzCell(header.depth),
@@ -3383,11 +3462,15 @@
       const tables = program.units.map(renderUnitMarkup).join("");
       const order = program.executionOrder.filter(item => item.sequence && item.command.startsWith("N"));
       const formatLabel = program.convertedFromBinary ? ` · ${escapeHtml(program.sourceFormat)} → PAM VIEW` : "";
+      const unmappedNotice = program.metadata.unmappedBlockCount
+        ? `<div><span class="label">DECODER </span><span class="late">${program.metadata.unmappedBlockCount} PRESERVED UNMAPPED BLOCK${program.metadata.unmappedBlockCount === 1 ? "" : "S"}</span></div>`
+        : "";
       return `<div class="program-banner">
         <div><span class="label">FILE </span><span class="value">${escapeHtml(program.sourceFileName || "PAM PROGRAM")}${formatLabel}</span></div>
         <div><span class="label">PROGRAM </span><span class="value">${escapeHtml(program.header.programNumber || "UNKNOWN")}</span></div>
         <div><span class="label">COMMENT </span><span class="value">${escapeHtml(program.header.comment || "—")}</span></div>
         <div><span class="label">DOCUMENT </span><span class="value">${program.metadata.rawLineCount} LINES · ${program.metadata.parsedBlockCount} BLOCKS · ${program.metadata.unitCount} UNITS</span></div>
+        ${unmappedNotice}
       </div><div class="mz-order-note">EXECUTION PRIORITIES · ${order.length ? order.map(item => `${escapeHtml(item.unit)} ${escapeHtml(item.sequence)} = P${escapeHtml(item.priorityRaw)}`).join(" · ") : "NONE"}</div><div class="mz-screen">${tables || '<div class="empty">NO UNIT-NUMBERED BLOCKS FOUND</div>'}</div>`;
     }
 
