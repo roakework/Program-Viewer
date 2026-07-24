@@ -270,6 +270,19 @@
     .dbm-suffix.warning { color: #ed0037; }
     .dbm-diamond { color: #000; font-size: 1.2rem; }
     .dbm-empty { padding: 36px; color: #47606d; text-align: center; }
+    .eia-view { margin-top: 14px; overflow: hidden; border: 1px solid #6a6a6a; background: #f7f7f7; color: #333; font-family: "Arial Narrow", "Roboto Condensed", Arial, sans-serif; }
+    .eia-toolbar { display: flex; min-height: 30px; align-items: center; justify-content: space-between; gap: 14px; padding: 0 8px; color: #fff; background: linear-gradient(#087aff, #003be8); border-bottom: 1px solid #001d92; font-weight: 700; }
+    .eia-file-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .eia-file-meta { flex: 0 0 auto; font-size: .72rem; font-weight: 400; opacity: .92; }
+    .eia-file-tabs { display: flex; gap: 2px; padding: 4px 5px 0; overflow-x: auto; background: #d7d7d7; border-bottom: 1px solid #8a8a8a; }
+    .eia-file-tab { padding: 5px 14px; border: 1px solid #7d7d7d; border-bottom: 0; color: #243548; background: #ededed; cursor: pointer; font: inherit; font-size: .76rem; }
+    .eia-file-tab.active { color: #fff; background: #075df1; border-color: #003fc6; }
+    .eia-code-wrap { max-height: calc(100vh - 190px); overflow: auto; background: #fafafa; }
+    .eia-line { display: grid; grid-template-columns: 76px minmax(max-content, 1fr); min-height: 27px; }
+    .eia-line:first-child .eia-code { border-bottom: 1px solid #153cff; }
+    .eia-line-number { box-sizing: border-box; padding: 1px 6px 1px 3px; color: #001dff; background: #dedede; border-right: 1px solid #777; text-align: right; font-size: 1.12rem; line-height: 25px; user-select: none; }
+    .eia-code { display: block; min-width: 100%; box-sizing: border-box; padding: 1px 6px; color: #3b4148; background: #fafafa; font-family: "Arial Narrow", "Roboto Condensed", ui-monospace, Consolas, monospace; font-size: 1.08rem; font-weight: 600; line-height: 25px; white-space: pre; }
+    .eia-empty { padding: 38px; color: #50606b; text-align: center; }
 
     details { margin-top: 14px; border: 1px solid var(--line); background: var(--panel); }
     summary { padding: 10px 12px; color: var(--cyan); cursor: pointer; }
@@ -280,6 +293,7 @@
       textarea { min-height: 230px; }
       .program-banner { grid-template-columns: 1fr; gap: 5px; }
       .dbm-table-wrap { max-height: none; }
+      .eia-code-wrap { max-height: none; }
     }
   </style>
 </head>
@@ -288,15 +302,16 @@
     <header class="machine-header">
       <div>
         <h1>MAZATROL CONVERSATIONAL VIEWER</h1>
-        <div class="subtitle">BUILD v2.9 · PBD UNIT 2/3 FIX · XLSX EXPORT</div>
+        <div class="subtitle">BUILD v3.0 · EIA TEXT VIEW · DBD/DBM TOOL DATA</div>
       </div>
-      <div class="status" id="status">READY · BUILD v2.9</div>
+      <div class="status" id="status">READY · BUILD v3.0</div>
     </header>
 
     <nav class="view-tabs" id="viewTabs" aria-label="Application views" hidden>
       <button class="view-tab active" id="programTabButton" type="button" data-view="program">PROGRAM VIEW</button>
       <button class="view-tab" id="toolsTabButton" type="button" data-view="tools">TOOL USAGE</button>
       <button class="view-tab" id="toolDataTabButton" type="button" data-view="tool-data">TOOL DATA</button>
+      <button class="view-tab" id="eiaTabButton" type="button" data-view="eia" hidden>EIA VIEW</button>
     </nav>
 
     <div id="programView">
@@ -306,9 +321,9 @@
         <div class="input-body">
           <label class="drop-zone" id="dropZone" for="fileInput">
             LOAD PROGRAM OR TOOL DATA FILES
-            <small>.PAM · .PBM · .PBD · .TXT · .DBM · .DBD</small>
+            <small>.PAM · .PBM · .PBD · .EIA · .TXT · .DBM · .DBD</small>
           </label>
-          <input id="fileInput" type="file" accept=".pam,.pbm,.pbd,.dbm,.dbd,.txt,text/plain,application/octet-stream" multiple>
+          <input id="fileInput" type="file" accept=".pam,.pbm,.pbd,.eia,.dbm,.dbd,.txt,text/plain,application/octet-stream" multiple>
           <textarea id="source" spellcheck="false" aria-label="Raw PAM data" placeholder="Uploaded PAM programs will appear here" readonly></textarea>
           <div class="error" id="error" role="alert"></div>
         </div>
@@ -343,6 +358,17 @@
       </div>
       <div class="dbm-table-wrap" id="toolDataTable">
         <div class="dbm-empty">UPLOAD TOOLDATA.DBM OR TOOLDATA.DBD TO VIEW THE MACHINE MAGAZINE</div>
+      </div>
+    </section>
+
+    <section class="eia-view" id="eiaView" hidden>
+      <div class="eia-toolbar">
+        <span class="eia-file-name" id="eiaFileName">NO EIA FILE LOADED</span>
+        <span class="eia-file-meta" id="eiaFileMeta">PLAIN TEXT</span>
+      </div>
+      <nav class="eia-file-tabs" id="eiaFileTabs" aria-label="Uploaded EIA files" hidden></nav>
+      <div class="eia-code-wrap" id="eiaCode">
+        <div class="eia-empty">UPLOAD AN .EIA FILE TO VIEW ITS TEXT</div>
       </div>
     </section>
 
@@ -2629,12 +2655,18 @@
     const programFileTabs = document.getElementById("programFileTabs");
     const toolsView = document.getElementById("toolsView");
     const toolDataView = document.getElementById("toolDataView");
+    const eiaView = document.getElementById("eiaView");
     const programTabButton = document.getElementById("programTabButton");
     const toolsTabButton = document.getElementById("toolsTabButton");
     const toolDataTabButton = document.getElementById("toolDataTabButton");
+    const eiaTabButton = document.getElementById("eiaTabButton");
     const toolSummary = document.getElementById("toolSummary");
     const toolDataTable = document.getElementById("toolDataTable");
     const toolDataFileName = document.getElementById("toolDataFileName");
+    const eiaFileName = document.getElementById("eiaFileName");
+    const eiaFileMeta = document.getElementById("eiaFileMeta");
+    const eiaFileTabs = document.getElementById("eiaFileTabs");
+    const eiaCode = document.getElementById("eiaCode");
     const exportToolUsageButton = document.getElementById("exportToolUsageButton");
     const unitPreviewOverlay = document.getElementById("unitPreviewOverlay");
     const unitPreviewTitle = document.getElementById("unitPreviewTitle");
@@ -3083,19 +3115,57 @@
     function activateView(viewName) {
       const showTools = viewName === "tools";
       const showToolData = viewName === "tool-data";
-      programView.hidden = showTools || showToolData;
+      const showEia = viewName === "eia";
+      programView.hidden = showTools || showToolData || showEia;
       toolsView.hidden = !showTools;
       toolDataView.hidden = !showToolData;
-      programTabButton.classList.toggle("active", !showTools && !showToolData);
+      eiaView.hidden = !showEia;
+      programTabButton.classList.toggle("active", !showTools && !showToolData && !showEia);
       toolsTabButton.classList.toggle("active", showTools);
       toolDataTabButton.classList.toggle("active", showToolData);
+      eiaTabButton.classList.toggle("active", showEia);
     }
 
     programTabButton.addEventListener("click", () => activateView("program"));
     toolsTabButton.addEventListener("click", () => activateView("tools"));
     toolDataTabButton.addEventListener("click", () => activateView("tool-data"));
+    eiaTabButton.addEventListener("click", () => activateView("eia"));
     window.activateView = activateView;
     window.renderDbmToolData = renderDbmToolData;
+
+    let loadedEiaDocuments = [];
+    let activeEiaIndex = 0;
+
+    function renderEiaDocument(index = activeEiaIndex) {
+      if (!loadedEiaDocuments.length) {
+        eiaFileName.textContent = "NO EIA FILE LOADED";
+        eiaFileMeta.textContent = "PLAIN TEXT";
+        eiaFileTabs.hidden = true;
+        eiaCode.innerHTML = '<div class="eia-empty">UPLOAD AN .EIA FILE TO VIEW ITS TEXT</div>';
+        return;
+      }
+      activeEiaIndex = Math.max(0, Math.min(index, loadedEiaDocuments.length - 1));
+      const document = loadedEiaDocuments[activeEiaIndex];
+      const normalizedText = String(document.text ?? "").replace(/\r\n?/g, "\n");
+      const lines = normalizedText.split("\n");
+      if (lines.length > 1 && lines[lines.length - 1] === "") lines.pop();
+      eiaFileName.textContent = document.name;
+      eiaFileMeta.textContent = `${lines.length} LINE${lines.length === 1 ? "" : "S"} · PLAIN TEXT`;
+      eiaFileTabs.innerHTML = loadedEiaDocuments.map((item, itemIndex) =>
+        `<button class="eia-file-tab${itemIndex === activeEiaIndex ? " active" : ""}" type="button" data-eia-index="${itemIndex}">${escapeHtml(item.name)}</button>`
+      ).join("");
+      eiaFileTabs.hidden = loadedEiaDocuments.length < 2;
+      eiaCode.innerHTML = lines.map((line, lineIndex) =>
+        `<div class="eia-line"><span class="eia-line-number">${lineIndex + 1}</span><code class="eia-code">${line ? escapeHtml(line) : "&nbsp;"}</code></div>`
+      ).join("");
+    }
+
+    eiaFileTabs.addEventListener("click", event => {
+      const button = event.target.closest("[data-eia-index]");
+      if (!button) return;
+      renderEiaDocument(Number(button.dataset.eiaIndex));
+    });
+    window.renderEiaDocument = renderEiaDocument;
 
     function mzCell(value, className = "", title = "") {
       return { value: value ?? "", className, title };
@@ -4198,6 +4268,7 @@
         const isMazatrolBinary = /\.(?:pbm|pbd)$/i.test(file.name);
         const isToolData = /\.(?:dbm|dbd)$/i.test(file.name);
         const isDbd = /\.dbd$/i.test(file.name);
+        const isEia = /\.eia$/i.test(file.name);
         reader.onload = () => {
           try {
             if (isToolData) {
@@ -4207,6 +4278,12 @@
                 database: isDbd
                   ? decodeDbdToolData(reader.result, file.name)
                   : decodeDbmToolData(reader.result, file.name)
+              });
+            } else if (isEia) {
+              resolve({
+                kind: "eia",
+                name: file.name,
+                text: String(reader.result)
               });
             } else if (isMazatrolBinary) {
               const profile = detectMazatrolBinaryProfile(reader.result, file.name);
@@ -4240,6 +4317,7 @@
         const results = await Promise.all(files.map(readProgramFile));
         const programResults = results.filter(result => result.kind === "program");
         const toolDataResults = results.filter(result => result.kind === "toolData");
+        const eiaResults = results.filter(result => result.kind === "eia");
         if (programResults.length) {
           loadedDocuments = programResults.map(document => ({
             ...document,
@@ -4254,6 +4332,15 @@
           viewTabs.hidden = false;
           status.textContent = `${loadedToolData.occupiedCount} TOOLS · ${loadedToolData.slotCount} MAGAZINE SLOTS · ${(loadedToolData.sourceFormat || "DBM")} LOADED`;
           activateView("tool-data");
+        }
+        if (eiaResults.length) {
+          loadedEiaDocuments = eiaResults;
+          activeEiaIndex = 0;
+          renderEiaDocument(0);
+          eiaTabButton.hidden = false;
+          viewTabs.hidden = false;
+          status.textContent = `${eiaResults.length} EIA FILE${eiaResults.length === 1 ? "" : "S"} · PLAIN TEXT`;
+          activateView("eia");
         }
         fileInput.value = "";
       } catch (problem) {
