@@ -152,6 +152,8 @@
     .workbench { display: block; }
     .workbench > .panel:first-child { margin-bottom: 14px; }
     textarea { min-height: 180px; }
+    .raw-data-panel { margin-top: 14px; }
+    .raw-data-panel textarea { display: block; min-height: 180px; margin: 0; border: 0; resize: vertical; }
     .mz-screen { min-width: 1120px; padding: 0 0 28px; background: #000018; overflow: hidden; }
     .mz-unit { margin-bottom: 29px; }
     .mz-unit:last-child { margin-bottom: 0; }
@@ -274,9 +276,7 @@
     .eia-toolbar { display: flex; min-height: 30px; align-items: center; justify-content: space-between; gap: 14px; padding: 0 8px; color: #fff; background: linear-gradient(#087aff, #003be8); border-bottom: 1px solid #001d92; font-weight: 700; }
     .eia-file-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .eia-file-meta { flex: 0 0 auto; font-size: .72rem; font-weight: 400; opacity: .92; }
-    .eia-file-tabs { display: flex; gap: 2px; padding: 4px 5px 0; overflow-x: auto; background: #d7d7d7; border-bottom: 1px solid #8a8a8a; }
-    .eia-file-tab { padding: 5px 14px; border: 1px solid #7d7d7d; border-bottom: 0; color: #243548; background: #ededed; cursor: pointer; font: inherit; font-size: .76rem; }
-    .eia-file-tab.active { color: #fff; background: #075df1; border-color: #003fc6; }
+    .eia-program-tabs { margin: 0; padding-top: 4px; background: #d7d7d7; border-bottom-color: #075df1; }
     .eia-code-wrap { max-height: calc(100vh - 190px); overflow: auto; background: #fafafa; }
     .eia-line { display: grid; grid-template-columns: 76px minmax(max-content, 1fr); min-height: 27px; }
     .eia-line:first-child .eia-code { border-bottom: 1px solid #153cff; }
@@ -324,7 +324,6 @@
             <small>.PAM · .PBM · .PBD · .EIA · .TXT · .DBM · .DBD</small>
           </label>
           <input id="fileInput" type="file" accept=".pam,.pbm,.pbd,.eia,.dbm,.dbd,.txt,text/plain,application/octet-stream" multiple>
-          <textarea id="source" spellcheck="false" aria-label="Raw PAM data" placeholder="Uploaded PAM programs will appear here" readonly></textarea>
           <div class="error" id="error" role="alert"></div>
         </div>
       </aside>
@@ -334,6 +333,11 @@
       <section class="panel" aria-live="polite">
         <div class="panel-title">CONVERSATIONAL PROGRAM GRID</div>
         <div id="viewer"><div class="empty">UPLOAD A .PAM, .PBM, OR .PBD FILE TO BEGIN</div></div>
+      </section>
+
+      <section class="panel raw-data-panel">
+        <div class="panel-title">RAW UPLOADED DATA</div>
+        <textarea id="source" spellcheck="false" aria-label="Raw uploaded program data" placeholder="Uploaded PAM programs will appear here" readonly></textarea>
       </section>
     </section>
 
@@ -366,7 +370,7 @@
         <span class="eia-file-name" id="eiaFileName">NO EIA FILE LOADED</span>
         <span class="eia-file-meta" id="eiaFileMeta">PLAIN TEXT</span>
       </div>
-      <nav class="eia-file-tabs" id="eiaFileTabs" aria-label="Uploaded EIA files" hidden></nav>
+      <nav class="program-file-tabs eia-program-tabs" id="eiaFileTabs" aria-label="Uploaded EIA files" hidden></nav>
       <div class="eia-code-wrap" id="eiaCode">
         <div class="eia-empty">UPLOAD AN .EIA FILE TO VIEW ITS TEXT</div>
       </div>
@@ -3135,6 +3139,8 @@
 
     let loadedEiaDocuments = [];
     let activeEiaIndex = 0;
+    let draggedEiaIndex = null;
+    let dropAfterEia = false;
 
     function renderEiaDocument(index = activeEiaIndex) {
       if (!loadedEiaDocuments.length) {
@@ -3151,21 +3157,136 @@
       if (lines.length > 1 && lines[lines.length - 1] === "") lines.pop();
       eiaFileName.textContent = document.name;
       eiaFileMeta.textContent = `${lines.length} LINE${lines.length === 1 ? "" : "S"} · PLAIN TEXT`;
-      eiaFileTabs.innerHTML = loadedEiaDocuments.map((item, itemIndex) =>
-        `<button class="eia-file-tab${itemIndex === activeEiaIndex ? " active" : ""}" type="button" data-eia-index="${itemIndex}">${escapeHtml(item.name)}</button>`
-      ).join("");
-      eiaFileTabs.hidden = loadedEiaDocuments.length < 2;
+      eiaFileTabs.innerHTML = loadedEiaDocuments.map((item, itemIndex) => {
+        const label = item.name || `EIA ${itemIndex + 1}`;
+        return `<div class="program-file-tab${itemIndex === activeEiaIndex ? " active" : ""}" draggable="true" data-eia-index="${itemIndex}" aria-selected="${itemIndex === activeEiaIndex}" title="${escapeHtml(label)} · Drag to reorder">
+          <button class="program-tab-select" type="button" title="Open ${escapeHtml(label)}">${escapeHtml(label)}</button>
+          <button class="program-tab-close" type="button" draggable="false" aria-label="Close ${escapeHtml(label)}" title="Remove this EIA file">×</button>
+        </div>`;
+      }).join("");
+      eiaFileTabs.hidden = false;
       eiaCode.innerHTML = lines.map((line, lineIndex) =>
         `<div class="eia-line"><span class="eia-line-number">${lineIndex + 1}</span><code class="eia-code">${line ? escapeHtml(line) : "&nbsp;"}</code></div>`
       ).join("");
     }
 
+    function closeEiaTab(index) {
+      if (!loadedEiaDocuments[index]) return;
+      loadedEiaDocuments.splice(index, 1);
+      if (!loadedEiaDocuments.length) {
+        activeEiaIndex = 0;
+        renderEiaDocument();
+        eiaTabButton.hidden = true;
+        if (currentPrograms.length) activateView("program");
+        else if (loadedToolData) activateView("tool-data");
+        else {
+          viewTabs.hidden = true;
+          activateView("program");
+        }
+        status.textContent = "READY";
+        return;
+      }
+      if (index < activeEiaIndex) activeEiaIndex -= 1;
+      else if (index === activeEiaIndex) activeEiaIndex = Math.min(index, loadedEiaDocuments.length - 1);
+      renderEiaDocument(activeEiaIndex);
+      status.textContent = `${loadedEiaDocuments.length} EIA FILE${loadedEiaDocuments.length === 1 ? "" : "S"} · PLAIN TEXT`;
+    }
+
+    function moveEiaTab(fromIndex, toIndex) {
+      if (
+        fromIndex === toIndex ||
+        fromIndex < 0 ||
+        toIndex < 0 ||
+        fromIndex >= loadedEiaDocuments.length ||
+        toIndex >= loadedEiaDocuments.length
+      ) return activeEiaIndex;
+      const activeDocument = loadedEiaDocuments[activeEiaIndex];
+      const [movedDocument] = loadedEiaDocuments.splice(fromIndex, 1);
+      loadedEiaDocuments.splice(toIndex, 0, movedDocument);
+      activeEiaIndex = loadedEiaDocuments.indexOf(activeDocument);
+      renderEiaDocument(activeEiaIndex);
+      return activeEiaIndex;
+    }
+
+    function clearEiaDropIndicators() {
+      eiaFileTabs.querySelectorAll(".program-file-tab").forEach(tab =>
+        tab.classList.remove("drag-before", "drag-after", "dragging")
+      );
+    }
+
     eiaFileTabs.addEventListener("click", event => {
-      const button = event.target.closest("[data-eia-index]");
-      if (!button) return;
-      renderEiaDocument(Number(button.dataset.eiaIndex));
+      const closeButton = event.target.closest(".program-tab-close");
+      if (closeButton) {
+        event.stopPropagation();
+        const tab = closeButton.closest(".program-file-tab");
+        closeEiaTab(Number(tab.dataset.eiaIndex));
+        return;
+      }
+      const tab = event.target.closest(".program-file-tab");
+      if (!tab) return;
+      renderEiaDocument(Number(tab.dataset.eiaIndex));
+    });
+
+    eiaFileTabs.addEventListener("dragstart", event => {
+      if (event.target.closest(".program-tab-close")) {
+        event.preventDefault();
+        return;
+      }
+      const tab = event.target.closest(".program-file-tab");
+      if (!tab) return;
+      draggedEiaIndex = Number(tab.dataset.eiaIndex);
+      tab.classList.add("dragging");
+      if (event.dataTransfer) {
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData("text/plain", String(draggedEiaIndex));
+      }
+    });
+
+    eiaFileTabs.addEventListener("dragover", event => {
+      const tab = event.target.closest(".program-file-tab");
+      if (!tab || draggedEiaIndex === null) return;
+      event.preventDefault();
+      clearEiaDropIndicators();
+      if (Number(tab.dataset.eiaIndex) === draggedEiaIndex) tab.classList.add("dragging");
+      const bounds = tab.getBoundingClientRect();
+      dropAfterEia = event.clientX > bounds.left + bounds.width / 2;
+      tab.classList.add(dropAfterEia ? "drag-after" : "drag-before");
+      if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+    });
+
+    eiaFileTabs.addEventListener("drop", event => {
+      const tab = event.target.closest(".program-file-tab");
+      if (!tab || draggedEiaIndex === null) return;
+      event.preventDefault();
+      const targetIndex = Number(tab.dataset.eiaIndex);
+      let destinationIndex = targetIndex + (dropAfterEia ? 1 : 0);
+      if (draggedEiaIndex < destinationIndex) destinationIndex -= 1;
+      destinationIndex = Math.max(0, Math.min(destinationIndex, loadedEiaDocuments.length - 1));
+      moveEiaTab(draggedEiaIndex, destinationIndex);
+      draggedEiaIndex = null;
+      clearEiaDropIndicators();
+    });
+
+    eiaFileTabs.addEventListener("dragend", () => {
+      draggedEiaIndex = null;
+      clearEiaDropIndicators();
+    });
+
+    eiaFileTabs.addEventListener("keydown", event => {
+      if (event.target.closest(".program-tab-close")) return;
+      if (!event.altKey || !["ArrowLeft", "ArrowRight"].includes(event.key)) return;
+      const tab = event.target.closest(".program-file-tab");
+      if (!tab) return;
+      const fromIndex = Number(tab.dataset.eiaIndex);
+      const toIndex = fromIndex + (event.key === "ArrowLeft" ? -1 : 1);
+      if (toIndex < 0 || toIndex >= loadedEiaDocuments.length) return;
+      event.preventDefault();
+      const movedIndex = moveEiaTab(fromIndex, toIndex);
+      eiaFileTabs.querySelector(`[data-eia-index="${movedIndex}"] .program-tab-select`)?.focus();
     });
     window.renderEiaDocument = renderEiaDocument;
+    window.closeEiaTab = closeEiaTab;
+    window.moveEiaTab = moveEiaTab;
 
     function mzCell(value, className = "", title = "") {
       return { value: value ?? "", className, title };
