@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Mazatrol Conversational Viewer — Build v2.9 XLSX + PBD</title>
+  <title>Mazatrol Conversational Viewer — Build v4.2 Value Compare</title>
   <style>
     :root {
       --bg: #020607;
@@ -284,6 +284,87 @@
     .eia-code { display: block; min-width: 100%; box-sizing: border-box; padding: 1px 6px; color: #3b4148; background: #fafafa; font-family: "Arial Narrow", "Roboto Condensed", ui-monospace, Consolas, monospace; font-size: 1.08rem; font-weight: 600; line-height: 25px; white-space: pre; }
     .eia-empty { padding: 38px; color: #50606b; text-align: center; }
 
+    .compare-view { margin-top: 14px; border: 1px solid var(--line); background: var(--panel); }
+    .compare-titlebar { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 10px 12px; color: var(--cyan); background: var(--panel-2); border-bottom: 1px solid var(--line); letter-spacing: .06em; }
+    .compare-titlebar small { color: var(--muted); letter-spacing: 0; }
+    .compare-input-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; padding: 14px; }
+    .compare-upload { display: block; min-height: 132px; padding: 18px; border: 1px dashed #2e8998; background: #061317; cursor: pointer; }
+    .compare-upload:hover, .compare-upload:focus-within { border-color: var(--yellow); background: #111506; }
+    .compare-upload-title { display: block; color: var(--cyan); font-size: 1.1rem; font-weight: 700; letter-spacing: .06em; }
+    .compare-upload-role { display: block; margin-top: 5px; color: var(--yellow); font-size: .72rem; }
+    .compare-upload-name { display: block; margin-top: 22px; overflow: hidden; color: var(--white); font-size: .82rem; text-overflow: ellipsis; white-space: nowrap; }
+    .compare-upload input { position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; pointer-events: none; }
+    .compare-error { min-height: 1.2em; padding: 0 14px; color: var(--danger); font-size: .78rem; }
+    .compare-actions { display: flex; gap: 9px; padding: 10px 14px 14px; border-bottom: 1px solid var(--line); }
+    .compare-actions button { flex: 0 0 auto; min-width: 190px; }
+    .compare-actions button:disabled { cursor: not-allowed; filter: grayscale(1); opacity: .45; }
+    .compare-reset { color: var(--cyan); background: transparent; }
+    .compare-results { padding: 14px; background: #000018; }
+    .compare-empty { padding: 46px 20px; color: var(--muted); text-align: center; }
+    .compare-program-banner { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; margin-bottom: 14px; border: 1px solid var(--line); background: var(--line); }
+    .compare-program-meta { padding: 10px 12px; background: #071013; }
+    .compare-program-meta strong { display: block; color: var(--cyan); }
+    .compare-program-meta span { display: block; margin-top: 5px; overflow: hidden; color: var(--white); font-size: .78rem; text-overflow: ellipsis; white-space: nowrap; }
+    .compare-summary-grid { display: grid; grid-template-columns: repeat(5, minmax(120px, 1fr)); gap: 8px; margin-bottom: 14px; }
+    .compare-stat { padding: 11px; border: 1px solid var(--line); background: #071013; }
+    .compare-stat-value { display: block; color: var(--yellow); font-size: 1.45rem; font-weight: 700; }
+    .compare-stat-label { display: block; margin-top: 3px; color: var(--muted); font-size: .68rem; letter-spacing: .04em; }
+    .compare-narrative { margin-bottom: 14px; padding: 11px 12px; border-left: 4px solid var(--yellow); color: var(--white); background: #171603; line-height: 1.5; }
+    .compare-identical { border-left-color: #35e77c; color: #9df0a6; background: #06170d; }
+    .compare-difference { margin: 10px 0 0; border: 1px solid var(--line); background: #02020e; }
+    .compare-difference summary { display: flex; align-items: center; gap: 10px; margin: 0; padding: 9px 11px; background: #071013; }
+    .compare-status { min-width: 78px; padding: 3px 7px; text-align: center; font-size: .68rem; font-weight: 700; }
+    .compare-status.added { color: #00180b; background: #35e77c; }
+    .compare-status.changed { color: #170014; background: #ff6be7; }
+    .compare-status.removed { color: #fff; background: #b40020; }
+    .compare-status.header { color: #001013; background: var(--yellow); }
+    .compare-difference-name { color: var(--white); font-weight: 700; }
+    .compare-difference-count { margin-left: auto; color: var(--muted); font-size: .72rem; }
+    .compare-diff-table-wrap { overflow: auto; }
+    .compare-diff-table { width: 100%; min-width: 880px; border-collapse: collapse; table-layout: fixed; }
+    .compare-diff-table th, .compare-diff-table td { border: 1px solid #34404d; vertical-align: top; }
+    .compare-diff-table th { padding: 7px 9px; color: #000; background: linear-gradient(#68a5ff, #3f73dc); }
+    .compare-diff-table th:last-child { background: linear-gradient(#ffe986, #eed05a); }
+    .compare-diff-line-no { width: 46px; padding: 4px 6px; color: #76aab4; background: #050b0d; text-align: right; user-select: none; }
+    .compare-diff-code { padding: 4px 8px; color: #d8f7fb; background: #010506; font: .76rem/1.45 Consolas, "Courier New", monospace; overflow-wrap: anywhere; white-space: pre-wrap; }
+    .compare-diff-code.added { color: #c8ffda; background: #052012; box-shadow: inset 4px 0 0 #35e77c; }
+    .compare-diff-code.removed { color: #ffc0c8; background: #28050b; box-shadow: inset 4px 0 0 #ff4965; }
+    .compare-diff-code.blank { color: transparent; background: #080b0c; }
+    .compare-conversational-title { margin: 18px 0 8px; padding: 9px 12px; color: #001013; background: linear-gradient(#68a5ff, #3f73dc); font-weight: 700; letter-spacing: .06em; }
+    .compare-conversational-title.removed { color: #fff; background: linear-gradient(#d92543, #8c061b); }
+    .compare-machine-list { display: grid; gap: 14px; }
+    .compare-machine-unit { overflow: hidden; border: 3px solid #34404d; background: #000018; }
+    .compare-machine-unit.matching { border-color: #375c65; }
+    .compare-machine-unit.changed { border-color: #ff6be7; box-shadow: 0 0 0 1px #ff6be7, 0 0 18px rgba(255, 107, 231, .2); }
+    .compare-machine-unit.added { border-color: #35e77c; box-shadow: 0 0 0 1px #35e77c, 0 0 18px rgba(53, 231, 124, .2); }
+    .compare-machine-unit.removed { border-color: #ff4965; box-shadow: 0 0 0 1px #ff4965, 0 0 18px rgba(255, 73, 101, .2); }
+    .compare-machine-label { display: flex; align-items: center; gap: 10px; padding: 7px 10px; color: #9bc4ff; background: #071013; border-bottom: 1px solid #34404d; font-size: .76rem; font-weight: 700; letter-spacing: .04em; }
+    .compare-machine-unit.changed .compare-machine-label { color: #fff; background: #8b067a; }
+    .compare-machine-unit.added .compare-machine-label { color: #00180b; background: #35e77c; }
+    .compare-machine-unit.removed .compare-machine-label { color: #fff; background: #b40020; }
+    .compare-machine-label .compare-machine-badge { margin-left: auto; padding: 2px 7px; border: 1px solid currentColor; font-size: .66rem; }
+    .compare-value-changes { border-bottom: 2px solid #ff6be7; background: #140014; }
+    .compare-value-changes-title { padding: 7px 10px; color: #fff; background: #65005b; font-size: .72rem; font-weight: 700; letter-spacing: .06em; }
+    .compare-value-change-list { display: grid; gap: 1px; background: #4e274c; }
+    .compare-value-change { display: grid; grid-template-columns: minmax(120px, .65fr) minmax(90px, .7fr) auto minmax(90px, 1fr); align-items: center; gap: 9px; padding: 7px 10px; color: #f5eff5; background: #080208; font-size: .76rem; }
+    .compare-value-change.added, .compare-value-change.removed { grid-template-columns: minmax(120px, .65fr) 120px minmax(120px, 1.7fr); }
+    .compare-field-location { color: #aeeeff; font-weight: 700; }
+    .compare-value-old { padding: 3px 6px; color: #ffc0c8; background: #28050b; text-decoration: line-through; overflow-wrap: anywhere; }
+    .compare-value-new { padding: 3px 6px; color: #140014; background: #ff86ec; font-weight: 800; overflow-wrap: anywhere; }
+    .compare-value-change.added .compare-value-new { color: #00180b; background: #35e77c; }
+    .compare-value-arrow { color: #ffe761; font-size: 1rem; font-weight: 800; text-align: center; }
+    .compare-value-action { color: #ffe761; font-size: .68rem; font-weight: 700; }
+    .compare-grid-value-highlight { padding: 1px 3px; color: #140014; background: #ff86ec; border: 1px solid #fff; font-weight: 900; box-shadow: 0 0 9px rgba(255, 134, 236, .75); }
+    .compare-machine-screen { overflow-x: auto; background: #000018; }
+    .compare-machine-screen > .mz-unit { min-width: 1120px; margin: 0; }
+    .compare-command-details { margin: 0; border: 0; border-top: 1px solid #34404d; }
+    .compare-command-details > summary { padding: 7px 10px; color: #76aab4; background: #02020e; font-size: .7rem; }
+    .compare-header-change { margin-bottom: 14px; border: 2px solid var(--yellow); background: #171603; }
+    .compare-header-change-title { padding: 7px 10px; color: #001013; background: var(--yellow); font-weight: 700; }
+    .compare-header-change-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; background: #7d7128; }
+    .compare-header-change-grid div { padding: 9px 11px; color: var(--white); background: #0d0d05; }
+    .compare-header-change-grid strong { display: block; color: var(--cyan); margin-bottom: 4px; }
+
     details { margin-top: 14px; border: 1px solid var(--line); background: var(--panel); }
     summary { padding: 10px 12px; color: var(--cyan); cursor: pointer; }
     pre { max-height: 420px; overflow: auto; margin: 0; padding: 13px; border-top: 1px solid var(--line); color: #d8f7fb; font-size: .76rem; }
@@ -294,6 +375,13 @@
       .program-banner { grid-template-columns: 1fr; gap: 5px; }
       .dbm-table-wrap { max-height: none; }
       .eia-code-wrap { max-height: none; }
+      .compare-input-grid, .compare-program-banner { grid-template-columns: 1fr; }
+      .compare-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .compare-actions { flex-direction: column; }
+      .compare-actions button { width: 100%; }
+      .compare-header-change-grid { grid-template-columns: 1fr; }
+      .compare-value-change, .compare-value-change.added, .compare-value-change.removed { grid-template-columns: 1fr; gap: 5px; }
+      .compare-value-arrow { text-align: left; transform: rotate(90deg); transform-origin: left center; }
     }
   </style>
 </head>
@@ -302,22 +390,23 @@
     <header class="machine-header">
       <div>
         <h1>MAZATROL CONVERSATIONAL VIEWER</h1>
-        <div class="subtitle">BUILD v3.0 · EIA TEXT VIEW · DBD/DBM TOOL DATA</div>
+        <div class="subtitle">BUILD v4.2 · VALUE-LEVEL PROGRAM COMPARE · EIA · DBD/DBM TOOL DATA</div>
       </div>
-      <div class="status" id="status">READY · BUILD v3.0</div>
+      <div class="status" id="status">READY · BUILD v4.2</div>
     </header>
 
-    <nav class="view-tabs" id="viewTabs" aria-label="Application views" hidden>
+    <nav class="view-tabs" id="viewTabs" aria-label="Application views">
       <button class="view-tab active" id="programTabButton" type="button" data-view="program">PROGRAM VIEW</button>
       <button class="view-tab" id="toolsTabButton" type="button" data-view="tools">TOOL USAGE</button>
       <button class="view-tab" id="toolDataTabButton" type="button" data-view="tool-data">TOOL DATA</button>
-      <button class="view-tab" id="eiaTabButton" type="button" data-view="eia" hidden>EIA VIEW</button>
+      <button class="view-tab" id="eiaTabButton" type="button" data-view="eia">EIA VIEW</button>
+      <button class="view-tab" id="compareTabButton" type="button" data-view="compare">PROGRAM COMPARE</button>
     </nav>
 
     <div id="programView">
     <section class="workbench">
       <aside class="panel">
-        <div class="panel-title">PAM INPUT</div>
+        <div class="panel-title">FILE INPUT</div>
         <div class="input-body">
           <label class="drop-zone" id="dropZone" for="fileInput">
             LOAD PROGRAM OR TOOL DATA FILES
@@ -373,6 +462,35 @@
       <nav class="program-file-tabs eia-program-tabs" id="eiaFileTabs" aria-label="Uploaded EIA files" hidden></nav>
       <div class="eia-code-wrap" id="eiaCode">
         <div class="eia-empty">UPLOAD AN .EIA FILE TO VIEW ITS TEXT</div>
+      </div>
+    </section>
+
+    <section class="compare-view" id="compareView" hidden>
+      <div class="compare-titlebar">
+        <span>PROGRAM COMPARE · PROGRAM B RELATIVE TO PROGRAM A</span>
+        <small>.PAM · .PBM · .PBD · .TXT</small>
+      </div>
+      <div class="compare-input-grid">
+        <label class="compare-upload" for="compareAInput">
+          <span class="compare-upload-title">PROGRAM A</span>
+          <span class="compare-upload-role">BASELINE PROGRAM</span>
+          <span class="compare-upload-name" id="compareAName">SELECT PROGRAM A</span>
+          <input id="compareAInput" type="file" accept=".pam,.pbm,.pbd,.txt,text/plain,application/octet-stream">
+        </label>
+        <label class="compare-upload" for="compareBInput">
+          <span class="compare-upload-title">PROGRAM B</span>
+          <span class="compare-upload-role">PROGRAM TO CHECK FOR CHANGES</span>
+          <span class="compare-upload-name" id="compareBName">SELECT PROGRAM B</span>
+          <input id="compareBInput" type="file" accept=".pam,.pbm,.pbd,.txt,text/plain,application/octet-stream">
+        </label>
+      </div>
+      <div class="compare-error" id="compareError" role="alert"></div>
+      <div class="compare-actions">
+        <button id="compareRunButton" type="button" disabled>COMPARE PROGRAMS</button>
+        <button class="compare-reset" id="compareResetButton" type="button">RESET COMPARISON</button>
+      </div>
+      <div class="compare-results" id="compareResults" aria-live="polite">
+        <div class="compare-empty">LOAD PROGRAM A AND PROGRAM B TO COMPARE THEIR HEADERS, UNITS, AND COMMAND BLOCKS</div>
       </div>
     </section>
 
@@ -2660,10 +2778,20 @@
     const toolsView = document.getElementById("toolsView");
     const toolDataView = document.getElementById("toolDataView");
     const eiaView = document.getElementById("eiaView");
+    const compareView = document.getElementById("compareView");
     const programTabButton = document.getElementById("programTabButton");
     const toolsTabButton = document.getElementById("toolsTabButton");
     const toolDataTabButton = document.getElementById("toolDataTabButton");
     const eiaTabButton = document.getElementById("eiaTabButton");
+    const compareTabButton = document.getElementById("compareTabButton");
+    const compareAInput = document.getElementById("compareAInput");
+    const compareBInput = document.getElementById("compareBInput");
+    const compareAName = document.getElementById("compareAName");
+    const compareBName = document.getElementById("compareBName");
+    const compareError = document.getElementById("compareError");
+    const compareRunButton = document.getElementById("compareRunButton");
+    const compareResetButton = document.getElementById("compareResetButton");
+    const compareResults = document.getElementById("compareResults");
     const toolSummary = document.getElementById("toolSummary");
     const toolDataTable = document.getElementById("toolDataTable");
     const toolDataFileName = document.getElementById("toolDataFileName");
@@ -3120,20 +3248,24 @@
       const showTools = viewName === "tools";
       const showToolData = viewName === "tool-data";
       const showEia = viewName === "eia";
-      programView.hidden = showTools || showToolData || showEia;
+      const showCompare = viewName === "compare";
+      programView.hidden = showTools || showToolData || showEia || showCompare;
       toolsView.hidden = !showTools;
       toolDataView.hidden = !showToolData;
       eiaView.hidden = !showEia;
-      programTabButton.classList.toggle("active", !showTools && !showToolData && !showEia);
+      compareView.hidden = !showCompare;
+      programTabButton.classList.toggle("active", !showTools && !showToolData && !showEia && !showCompare);
       toolsTabButton.classList.toggle("active", showTools);
       toolDataTabButton.classList.toggle("active", showToolData);
       eiaTabButton.classList.toggle("active", showEia);
+      compareTabButton.classList.toggle("active", showCompare);
     }
 
     programTabButton.addEventListener("click", () => activateView("program"));
     toolsTabButton.addEventListener("click", () => activateView("tools"));
     toolDataTabButton.addEventListener("click", () => activateView("tool-data"));
     eiaTabButton.addEventListener("click", () => activateView("eia"));
+    compareTabButton.addEventListener("click", () => activateView("compare"));
     window.activateView = activateView;
     window.renderDbmToolData = renderDbmToolData;
 
@@ -3176,13 +3308,7 @@
       if (!loadedEiaDocuments.length) {
         activeEiaIndex = 0;
         renderEiaDocument();
-        eiaTabButton.hidden = true;
-        if (currentPrograms.length) activateView("program");
-        else if (loadedToolData) activateView("tool-data");
-        else {
-          viewTabs.hidden = true;
-          activateView("program");
-        }
+        activateView("eia");
         status.textContent = "READY";
         return;
       }
@@ -4229,7 +4355,6 @@
         programFileTabs.hidden = true;
         viewer.innerHTML = '<div class="empty">UPLOAD A .PAM, .PBM, OR .PBD FILE TO BEGIN</div>';
         renderToolSummary([]);
-        viewTabs.hidden = true;
         activateView("program");
         jsonOutput.textContent = "{}";
         status.textContent = "READY";
@@ -4375,7 +4500,6 @@
         });
         renderPrograms(programs);
         updateCombinedProgramState(programs);
-        viewTabs.hidden = false;
         activateView("program");
       } catch (problem) {
         error.textContent = `Parser error: ${problem.message}`;
@@ -4429,6 +4553,631 @@
       });
     }
 
+    const compareDocuments = { a: null, b: null };
+
+    function normalizeCompareLine(line) {
+      return String(line ?? "").replace(/\s+/g, "").toUpperCase();
+    }
+
+    function normalizeCompareUnitLine(line) {
+      return normalizeCompareLine(line).replace(/U&?[-+]?(?:\d+(?:\.\d*)?|\.\d+)/g, "U#");
+    }
+
+    function expandCompareLines(rawLines) {
+      return (rawLines || []).flatMap(raw =>
+        String(raw ?? "").replace(/\r\n?/g, "\n").split("\n")
+      ).map(line => line.trim()).filter(Boolean);
+    }
+
+    function compareUnitTypeLabel(type) {
+      return String(type || "UNMAPPED")
+        .replace(/([a-z])([A-Z])/g, "$1 $2")
+        .replace(/[_-]+/g, " ")
+        .toUpperCase();
+    }
+
+    function compareHeaderLines(program) {
+      const preambleLines = expandCompareLines(program.preamble?.map(block => block.raw));
+      return preambleLines.length ? preambleLines : (program.header?.raw ? [program.header.raw] : []);
+    }
+
+    function compareLineTokens(line, ignoreUnitNumber = false) {
+      const text = String(line || "").trim();
+      const command = text.match(/^(G\d{3}|N\d+)/i)?.[1]?.toUpperCase() || "RAW";
+      const parameters = extractParameters(text).filter(parameter => !(ignoreUnitNumber && parameter.key === "U"));
+      const occurrences = new Map();
+      const fields = parameters.map(parameter => {
+        const occurrence = (occurrences.get(parameter.key) || 0) + 1;
+        occurrences.set(parameter.key, occurrence);
+        return {
+          id: `${parameter.key}:${occurrence}`,
+          key: parameter.key,
+          occurrence,
+          value: String(parameter.rawValue ?? parameter.value ?? "").replace(/^&/, ""),
+          rawValue: String(parameter.rawValue ?? parameter.value ?? "")
+        };
+      });
+      const comments = [...text.matchAll(/\(([^)]*)\)/g)].map(match => match[1].trim()).filter(Boolean);
+      return {
+        raw: text,
+        command,
+        fields,
+        comments,
+        structure: `${command}|${fields.map(field => field.id).join(",")}|${comments.length}`
+      };
+    }
+
+    function compareSequenceSimilarity(left, right) {
+      const a = left || [];
+      const b = right || [];
+      if (!a.length && !b.length) return 1;
+      const matrix = Array.from({ length: a.length + 1 }, () => new Uint16Array(b.length + 1));
+      for (let aIndex = a.length - 1; aIndex >= 0; aIndex -= 1) {
+        for (let bIndex = b.length - 1; bIndex >= 0; bIndex -= 1) {
+          matrix[aIndex][bIndex] = a[aIndex] === b[bIndex]
+            ? matrix[aIndex + 1][bIndex + 1] + 1
+            : Math.max(matrix[aIndex + 1][bIndex], matrix[aIndex][bIndex + 1]);
+        }
+      }
+      return matrix[0][0] / Math.max(a.length, b.length, 1);
+    }
+
+    function compareLineSimilarity(left, right, ignoreUnitNumber = false) {
+      const a = compareLineTokens(left, ignoreUnitNumber);
+      const b = compareLineTokens(right, ignoreUnitNumber);
+      if ((ignoreUnitNumber ? normalizeCompareUnitLine(left) : normalizeCompareLine(left)) ===
+          (ignoreUnitNumber ? normalizeCompareUnitLine(right) : normalizeCompareLine(right))) return 1;
+      const commandScore = a.command === b.command
+        ? 1
+        : (a.command.charAt(0) === b.command.charAt(0) ? 0.35 : 0);
+      const fieldScore = compareSequenceSimilarity(
+        a.fields.map(field => field.id),
+        b.fields.map(field => field.id)
+      );
+      return commandScore * 0.68 + fieldScore * 0.32;
+    }
+
+    function alignCompareLines(aLines, bLines, ignoreUnitNumber = false) {
+      const a = aLines || [];
+      const b = bLines || [];
+      const gapPenalty = -1;
+      const scores = Array.from({ length: a.length + 1 }, () => new Float64Array(b.length + 1));
+      const moves = Array.from({ length: a.length + 1 }, () => Array(b.length + 1).fill(""));
+      for (let aIndex = 1; aIndex <= a.length; aIndex += 1) {
+        scores[aIndex][0] = scores[aIndex - 1][0] + gapPenalty;
+        moves[aIndex][0] = "up";
+      }
+      for (let bIndex = 1; bIndex <= b.length; bIndex += 1) {
+        scores[0][bIndex] = scores[0][bIndex - 1] + gapPenalty;
+        moves[0][bIndex] = "left";
+      }
+      for (let aIndex = 1; aIndex <= a.length; aIndex += 1) {
+        for (let bIndex = 1; bIndex <= b.length; bIndex += 1) {
+          const similarity = compareLineSimilarity(a[aIndex - 1], b[bIndex - 1], ignoreUnitNumber);
+          const pairScore = similarity === 1 ? 4 : similarity >= 0.55 ? 0.5 + similarity * 2 : -2.25;
+          const diagonal = scores[aIndex - 1][bIndex - 1] + pairScore;
+          const up = scores[aIndex - 1][bIndex] + gapPenalty;
+          const left = scores[aIndex][bIndex - 1] + gapPenalty;
+          if (diagonal >= up && diagonal >= left) {
+            scores[aIndex][bIndex] = diagonal;
+            moves[aIndex][bIndex] = "diagonal";
+          } else if (up >= left) {
+            scores[aIndex][bIndex] = up;
+            moves[aIndex][bIndex] = "up";
+          } else {
+            scores[aIndex][bIndex] = left;
+            moves[aIndex][bIndex] = "left";
+          }
+        }
+      }
+
+      const operations = [];
+      let aIndex = a.length;
+      let bIndex = b.length;
+      while (aIndex > 0 || bIndex > 0) {
+        const move = moves[aIndex][bIndex];
+        if (move === "diagonal") {
+          const left = a[aIndex - 1];
+          const right = b[bIndex - 1];
+          const same = (ignoreUnitNumber ? normalizeCompareUnitLine(left) : normalizeCompareLine(left)) ===
+            (ignoreUnitNumber ? normalizeCompareUnitLine(right) : normalizeCompareLine(right));
+          operations.push({ type: same ? "same" : "changed", a: left, b: right });
+          aIndex -= 1;
+          bIndex -= 1;
+        } else if (move === "up") {
+          operations.push({ type: "removed", a: a[aIndex - 1], b: "" });
+          aIndex -= 1;
+        } else {
+          operations.push({ type: "added", a: "", b: b[bIndex - 1] });
+          bIndex -= 1;
+        }
+      }
+      return operations.reverse();
+    }
+
+    function diffCompareLines(aLines, bLines, ignoreUnitNumber = false) {
+      return alignCompareLines(aLines, bLines, ignoreUnitNumber);
+    }
+
+    function compareUnitSignature(unit) {
+      return expandCompareLines(unit.rawLines).map(normalizeCompareUnitLine).join("\n");
+    }
+
+    function compareUnitStructure(unit) {
+      return expandCompareLines(unit.rawLines).map(line => compareLineTokens(line, true).structure);
+    }
+
+    function compareUnitFamily(unit) {
+      if (unit?.type) return String(unit.type).toUpperCase();
+      return unit?.blocks ? classifyUnit(unit).toUpperCase() : "";
+    }
+
+    function compareUnitSimilarity(unitA, unitB) {
+      if (compareUnitSignature(unitA) === compareUnitSignature(unitB)) return 1;
+      const structureA = compareUnitStructure(unitA);
+      const structureB = compareUnitStructure(unitB);
+      const structureScore = compareSequenceSimilarity(structureA, structureB);
+      const commandScore = compareSequenceSimilarity(
+        structureA.map(item => item.split("|")[0]),
+        structureB.map(item => item.split("|")[0])
+      );
+      const familyA = compareUnitFamily(unitA);
+      const familyB = compareUnitFamily(unitB);
+      const familyScore = familyA && familyB && familyA === familyB ? 1 : 0;
+      const lengthScore = 1 - Math.min(1, Math.abs(structureA.length - structureB.length) / Math.max(structureA.length, structureB.length, 1));
+      return structureScore * 0.38 + commandScore * 0.32 + familyScore * 0.2 + lengthScore * 0.1;
+    }
+
+    function alignCompareUnits(unitsA, unitsB) {
+      const a = unitsA || [];
+      const b = unitsB || [];
+      const gapPenalty = -1.15;
+      const scores = Array.from({ length: a.length + 1 }, () => new Float64Array(b.length + 1));
+      const moves = Array.from({ length: a.length + 1 }, () => Array(b.length + 1).fill(""));
+      for (let aIndex = 1; aIndex <= a.length; aIndex += 1) {
+        scores[aIndex][0] = scores[aIndex - 1][0] + gapPenalty;
+        moves[aIndex][0] = "up";
+      }
+      for (let bIndex = 1; bIndex <= b.length; bIndex += 1) {
+        scores[0][bIndex] = scores[0][bIndex - 1] + gapPenalty;
+        moves[0][bIndex] = "left";
+      }
+      for (let aIndex = 1; aIndex <= a.length; aIndex += 1) {
+        for (let bIndex = 1; bIndex <= b.length; bIndex += 1) {
+          const similarity = compareUnitSimilarity(a[aIndex - 1], b[bIndex - 1]);
+          const pairScore = similarity === 1 ? 5 : similarity >= 0.48 ? 0.75 + similarity * 2.5 : -2.6;
+          const diagonal = scores[aIndex - 1][bIndex - 1] + pairScore;
+          const up = scores[aIndex - 1][bIndex] + gapPenalty;
+          const left = scores[aIndex][bIndex - 1] + gapPenalty;
+          if (diagonal >= up && diagonal >= left) {
+            scores[aIndex][bIndex] = diagonal;
+            moves[aIndex][bIndex] = "diagonal";
+          } else if (up >= left) {
+            scores[aIndex][bIndex] = up;
+            moves[aIndex][bIndex] = "up";
+          } else {
+            scores[aIndex][bIndex] = left;
+            moves[aIndex][bIndex] = "left";
+          }
+        }
+      }
+      const pairs = [];
+      let aIndex = a.length;
+      let bIndex = b.length;
+      while (aIndex > 0 || bIndex > 0) {
+        const move = moves[aIndex][bIndex];
+        if (move === "diagonal") {
+          const unitA = a[aIndex - 1];
+          const unitB = b[bIndex - 1];
+          pairs.push({ unitA, unitB, similarity: compareUnitSimilarity(unitA, unitB) });
+          aIndex -= 1;
+          bIndex -= 1;
+        } else if (move === "up") {
+          pairs.push({ unitA: a[aIndex - 1], unitB: null, similarity: 0 });
+          aIndex -= 1;
+        } else {
+          pairs.push({ unitA: null, unitB: b[bIndex - 1], similarity: 0 });
+          bIndex -= 1;
+        }
+      }
+      return pairs.reverse();
+    }
+
+    function describeCompareFieldChanges(unitA, unitB, operations) {
+      const changes = [];
+      operations.forEach((operation, operationIndex) => {
+        if (operation.type === "same") return;
+        const tokenA = operation.a ? compareLineTokens(operation.a, true) : null;
+        const tokenB = operation.b ? compareLineTokens(operation.b, true) : null;
+        const location = tokenB?.command || tokenA?.command || `LINE ${operationIndex + 1}`;
+        if (operation.type === "added") {
+          changes.push({ kind: "line-added", location, field: "LINE", from: "", to: operation.b });
+          return;
+        }
+        if (operation.type === "removed") {
+          changes.push({ kind: "line-removed", location, field: "LINE", from: operation.a, to: "" });
+          return;
+        }
+        if (tokenA.command !== tokenB.command) {
+          changes.push({ kind: "changed", location, field: "COMMAND", from: tokenA.command, to: tokenB.command });
+        }
+        const fieldsA = new Map(tokenA.fields.map(field => [field.id, field]));
+        const fieldsB = new Map(tokenB.fields.map(field => [field.id, field]));
+        const fieldIds = [...new Set([...fieldsA.keys(), ...fieldsB.keys()])];
+        fieldIds.forEach(fieldId => {
+          const fieldA = fieldsA.get(fieldId);
+          const fieldB = fieldsB.get(fieldId);
+          const fieldLabel = fieldB?.occurrence > 1 || fieldA?.occurrence > 1
+            ? `${fieldB?.key || fieldA?.key} #${fieldB?.occurrence || fieldA?.occurrence}`
+            : (fieldB?.key || fieldA?.key || fieldId);
+          if (!fieldA) {
+            changes.push({ kind: "added", location, field: fieldLabel, from: "", to: fieldB.value });
+          } else if (!fieldB) {
+            changes.push({ kind: "removed", location, field: fieldLabel, from: fieldA.value, to: "" });
+          } else if (normalizeCompareLine(fieldA.value) !== normalizeCompareLine(fieldB.value)) {
+            changes.push({ kind: "changed", location, field: fieldLabel, from: fieldA.value, to: fieldB.value });
+          }
+        });
+        const commentA = tokenA.comments.join(" · ");
+        const commentB = tokenB.comments.join(" · ");
+        if (normalizeCompareLine(commentA) !== normalizeCompareLine(commentB)) {
+          changes.push({
+            kind: commentA && commentB ? "changed" : commentB ? "added" : "removed",
+            location,
+            field: "COMMENT",
+            from: commentA,
+            to: commentB
+          });
+        }
+      });
+      return changes;
+    }
+
+    function analyzeProgramComparison(programA, programB) {
+      const result = {
+        programA,
+        programB,
+        addedUnits: [],
+        changedUnits: [],
+        removedUnits: [],
+        matchingUnits: [],
+        headerChanged: false,
+        addedLines: 0,
+        removedLines: 0,
+        changedLines: 0,
+        differences: [],
+        unitComparisons: []
+      };
+
+      const headerOperations = diffCompareLines(compareHeaderLines(programA), compareHeaderLines(programB));
+      if (headerOperations.some(operation => operation.type !== "same")) {
+        const addedCount = headerOperations.filter(operation => operation.type === "added").length;
+        const removedCount = headerOperations.filter(operation => operation.type === "removed").length;
+        const changedCount = headerOperations.filter(operation => operation.type === "changed").length;
+        result.headerChanged = true;
+        result.addedLines += addedCount;
+        result.removedLines += removedCount;
+        result.changedLines += changedCount;
+        result.differences.push({
+          key: "HEADER",
+          status: "header",
+          label: "PROGRAM HEADER / PREAMBLE",
+          addedCount,
+          removedCount,
+          changedCount,
+          operations: headerOperations,
+          fieldChanges: []
+        });
+      }
+
+      alignCompareUnits(programA.units, programB.units).forEach((pair, pairIndex) => {
+        const key = `PAIR-${pairIndex}`;
+        let status;
+        let operations;
+        if (!pair.unitA) {
+          status = "added";
+          operations = expandCompareLines(pair.unitB.rawLines).map(line => ({ type: "added", a: "", b: line }));
+        } else if (!pair.unitB) {
+          status = "removed";
+          operations = expandCompareLines(pair.unitA.rawLines).map(line => ({ type: "removed", a: line, b: "" }));
+        } else {
+          operations = diffCompareLines(
+            expandCompareLines(pair.unitA.rawLines),
+            expandCompareLines(pair.unitB.rawLines),
+            true
+          );
+          status = operations.some(operation => operation.type !== "same") ? "changed" : "matching";
+        }
+
+        const fieldChanges = pair.unitA && pair.unitB
+          ? describeCompareFieldChanges(pair.unitA, pair.unitB, operations)
+          : [];
+        const comparison = { ...pair, key, status, operations, fieldChanges };
+        result.unitComparisons.push(comparison);
+
+        if (status === "matching") {
+          result.matchingUnits.push(pair.unitB.number);
+          return;
+        }
+        const addedCount = operations.filter(operation => operation.type === "added").length;
+        const removedCount = operations.filter(operation => operation.type === "removed").length;
+        const changedCount = operations.filter(operation => operation.type === "changed").length;
+        result.addedLines += addedCount;
+        result.removedLines += removedCount;
+        result.changedLines += changedCount;
+        if (status === "added") result.addedUnits.push(pair.unitB.number);
+        else if (status === "removed") result.removedUnits.push(pair.unitA.number);
+        else result.changedUnits.push(pair.unitB.number);
+
+        const unit = pair.unitB || pair.unitA;
+        const counterpart = pair.unitA && pair.unitB && pair.unitA.number !== pair.unitB.number
+          ? ` · COMPARED WITH PROGRAM A UNIT ${pair.unitA.number}`
+          : "";
+        const difference = {
+          key,
+          status,
+          label: `UNIT ${unit.number} · ${compareUnitTypeLabel(unit.type)}${counterpart}`,
+          addedCount,
+          removedCount,
+          changedCount,
+          operations,
+          fieldChanges,
+          unitA: pair.unitA,
+          unitB: pair.unitB
+        };
+        comparison.difference = difference;
+        result.differences.push(difference);
+      });
+
+      return result;
+    }
+
+    function formatCompareUnitList(units) {
+      const labels = units.map(unit => `Unit ${unit}`);
+      if (!labels.length) return "";
+      if (labels.length === 1) return labels[0];
+      if (labels.length === 2) return `${labels[0]} and ${labels[1]}`;
+      return `${labels.slice(0, -1).join(", ")}, and ${labels.at(-1)}`;
+    }
+
+    function comparisonNarrative(result) {
+      if (!result.differences.length) {
+        return "No value differences were found. Program B matches Program A. Unit-number changes are intentionally ignored.";
+      }
+      const statements = [];
+      if (result.headerChanged) statements.push("the program header or preamble changed");
+      if (result.addedUnits.length) statements.push(`Program B adds ${formatCompareUnitList(result.addedUnits)}`);
+      if (result.changedUnits.length) statements.push(`Program B changes ${formatCompareUnitList(result.changedUnits)}`);
+      if (result.removedUnits.length) statements.push(`Program B no longer contains ${formatCompareUnitList(result.removedUnits)} from Program A`);
+      const sentence = statements.map((statement, index) => {
+        if (index === 0) return statement.charAt(0).toUpperCase() + statement.slice(1);
+        return statement;
+      }).join(". ");
+      return `${sentence}. Unit-number changes are ignored. Program B is shown below in the same conversational layout as Program View: green units are added, magenta units changed, and red units were removed from Program A.`;
+    }
+
+    function renderCompareDifference(difference) {
+      let aLineNumber = 0;
+      let bLineNumber = 0;
+      const rows = difference.operations.map(operation => {
+        if (operation.type !== "added") aLineNumber += 1;
+        if (operation.type !== "removed") bLineNumber += 1;
+        const aClass = ["removed", "changed"].includes(operation.type) ? "removed" : operation.type === "added" ? "blank" : "";
+        const bClass = ["added", "changed"].includes(operation.type) ? "added" : operation.type === "removed" ? "blank" : "";
+        return `<tr>
+          <td class="compare-diff-line-no">${operation.type === "added" ? "" : aLineNumber}</td>
+          <td class="compare-diff-code ${aClass}">${operation.a ? escapeHtml(operation.a) : "&nbsp;"}</td>
+          <td class="compare-diff-line-no">${operation.type === "removed" ? "" : bLineNumber}</td>
+          <td class="compare-diff-code ${bClass}">${operation.b ? escapeHtml(operation.b) : "&nbsp;"}</td>
+        </tr>`;
+      }).join("");
+      const countParts = [
+        difference.changedCount ? `${difference.changedCount} VALUE CHANGE${difference.changedCount === 1 ? "" : "S"}` : "",
+        difference.addedCount ? `${difference.addedCount} B ADDITION${difference.addedCount === 1 ? "" : "S"}` : "",
+        difference.removedCount ? `${difference.removedCount} A REMOVAL${difference.removedCount === 1 ? "" : "S"}` : ""
+      ].filter(Boolean).join(" · ");
+      const statusText = {
+        added: "ADDED",
+        changed: "CHANGED",
+        removed: "REMOVED",
+        header: "HEADER"
+      }[difference.status];
+      return `<details class="compare-difference compare-command-details">
+        <summary>
+          <span class="compare-status ${difference.status}">${statusText}</span>
+          <span class="compare-difference-name">${escapeHtml(difference.label)}</span>
+          <span class="compare-difference-count">${escapeHtml(countParts)}</span>
+        </summary>
+        <div class="compare-diff-table-wrap">
+          <table class="compare-diff-table">
+            <thead><tr><th colspan="2">PROGRAM A · BASELINE</th><th colspan="2">PROGRAM B · COMPARED</th></tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      </details>`;
+    }
+
+    function renderCompareFieldSummary(comparison) {
+      if (comparison.status !== "changed" || !comparison.fieldChanges.length) return "";
+      const rows = comparison.fieldChanges.map(change => {
+        const label = `<span class="compare-field-location">${escapeHtml(change.location)} · ${escapeHtml(change.field)}</span>`;
+        if (change.kind === "changed") {
+          return `<div class="compare-value-change changed">${label}<span class="compare-value-old">${escapeHtml(change.from || "EMPTY")}</span><span class="compare-value-arrow">→</span><mark class="compare-value-new">${escapeHtml(change.to || "EMPTY")}</mark></div>`;
+        }
+        if (change.kind === "added" || change.kind === "line-added") {
+          return `<div class="compare-value-change added">${label}<span class="compare-value-action">ADDED IN B</span><mark class="compare-value-new">${escapeHtml(change.to || "EMPTY")}</mark></div>`;
+        }
+        return `<div class="compare-value-change removed">${label}<span class="compare-value-action">REMOVED FROM B</span><span class="compare-value-old">${escapeHtml(change.from || "EMPTY")}</span></div>`;
+      }).join("");
+      return `<section class="compare-value-changes">
+        <div class="compare-value-changes-title">EXACT VALUES CHANGED</div>
+        <div class="compare-value-change-list">${rows}</div>
+      </section>`;
+    }
+
+    function highlightCompareMachineValues(markup, fieldChanges) {
+      const targets = [...new Set(fieldChanges
+        .filter(change => ["changed", "added"].includes(change.kind) && change.to && change.field !== "LINE")
+        .map(change => String(change.to).replace(/^&/, "").trim())
+        .filter(Boolean))]
+        .sort((left, right) => right.length - left.length);
+      if (!targets.length) return markup;
+      return String(markup).split(/(<[^>]+>)/g).map(part => {
+        if (!part || part.startsWith("<")) return part;
+        const trimmed = part.trim();
+        const target = targets.find(value => normalizeCompareLine(value) === normalizeCompareLine(trimmed));
+        if (!target) return part;
+        const leading = part.slice(0, part.indexOf(trimmed));
+        const trailing = part.slice(part.indexOf(trimmed) + trimmed.length);
+        return `${leading}<mark class="compare-grid-value-highlight">${part.slice(part.indexOf(trimmed), part.indexOf(trimmed) + trimmed.length)}</mark>${trailing}`;
+      }).join("");
+    }
+
+    function renderCompareMachineUnit(comparison, programLabel) {
+      const statusName = comparison.status;
+      const unit = statusName === "removed" ? comparison.unitA : comparison.unitB;
+      const difference = comparison.difference;
+      const statusLabel = {
+        added: "ADDED IN PROGRAM B",
+        changed: comparison.unitA?.number === comparison.unitB?.number
+          ? "VALUES CHANGED IN PROGRAM B"
+          : `VALUES CHANGED · COMPARED TO A UNIT ${comparison.unitA?.number}`,
+        removed: "REMOVED FROM PROGRAM B",
+        matching: comparison.unitA?.number === comparison.unitB?.number
+          ? "MATCHES PROGRAM A"
+          : `MATCHES A UNIT ${comparison.unitA?.number} · NUMBER IGNORED`
+      }[statusName];
+      const machineMarkup = statusName === "changed"
+        ? highlightCompareMachineValues(renderUnitMarkup(unit), comparison.fieldChanges)
+        : renderUnitMarkup(unit);
+      return `<article class="compare-machine-unit ${statusName}">
+        <div class="compare-machine-label">
+          <span>${escapeHtml(programLabel)} · UNIT ${escapeHtml(unit.number)}</span>
+          <span class="compare-machine-badge">${escapeHtml(statusLabel)}</span>
+        </div>
+        ${renderCompareFieldSummary(comparison)}
+        <div class="compare-machine-screen">${machineMarkup}</div>
+        ${difference ? renderCompareDifference(difference) : ""}
+      </article>`;
+    }
+
+    function renderProgramComparison(result) {
+      const programA = result.programA;
+      const programB = result.programB;
+      const noDifferences = result.differences.length === 0;
+      const differenceByKey = new Map(result.differences.map(difference => [difference.key, difference]));
+      const programBUnits = result.unitComparisons
+        .filter(comparison => comparison.unitB)
+        .map(comparison => renderCompareMachineUnit(comparison, "PROGRAM B"))
+        .join("");
+      const removedUnits = result.unitComparisons
+        .filter(comparison => comparison.status === "removed")
+        .map(comparison => renderCompareMachineUnit(comparison, "PROGRAM A"))
+        .join("");
+      const headerDifference = differenceByKey.get("HEADER");
+      const headerChangeMarkup = result.headerChanged ? `<section class="compare-header-change">
+        <div class="compare-header-change-title">PROGRAM HEADER / PREAMBLE CHANGED</div>
+        <div class="compare-header-change-grid">
+          <div><strong>PROGRAM A</strong>${escapeHtml(programA.header.raw || programA.header.programNumber || "UNKNOWN")}</div>
+          <div><strong>PROGRAM B</strong>${escapeHtml(programB.header.raw || programB.header.programNumber || "UNKNOWN")}</div>
+        </div>
+        ${headerDifference ? renderCompareDifference(headerDifference) : ""}
+      </section>` : "";
+      compareResults.innerHTML = `<div class="compare-program-banner">
+        <div class="compare-program-meta">
+          <strong>PROGRAM A · BASELINE</strong>
+          <span>${escapeHtml(programA.sourceFileName)} · ${escapeHtml(programA.header.programNumber || "UNKNOWN")} · ${programA.metadata.unitCount} UNITS</span>
+        </div>
+        <div class="compare-program-meta">
+          <strong>PROGRAM B · COMPARED</strong>
+          <span>${escapeHtml(programB.sourceFileName)} · ${escapeHtml(programB.header.programNumber || "UNKNOWN")} · ${programB.metadata.unitCount} UNITS</span>
+        </div>
+      </div>
+      <div class="compare-summary-grid">
+        <div class="compare-stat"><span class="compare-stat-value">${result.addedUnits.length}</span><span class="compare-stat-label">UNITS ADDED IN B</span></div>
+        <div class="compare-stat"><span class="compare-stat-value">${result.changedUnits.length}</span><span class="compare-stat-label">UNITS CHANGED IN B</span></div>
+        <div class="compare-stat"><span class="compare-stat-value">${result.removedUnits.length}</span><span class="compare-stat-label">UNITS REMOVED FROM A</span></div>
+        <div class="compare-stat"><span class="compare-stat-value">${result.matchingUnits.length}</span><span class="compare-stat-label">MATCHING UNITS</span></div>
+        <div class="compare-stat"><span class="compare-stat-value">${result.headerChanged ? "YES" : "NO"}</span><span class="compare-stat-label">HEADER CHANGED</span></div>
+      </div>
+      <div class="compare-narrative${noDifferences ? " compare-identical" : ""}">${escapeHtml(comparisonNarrative(result))}</div>
+      ${headerChangeMarkup}
+      <div class="compare-conversational-title">PROGRAM B · CONVERSATIONAL COMPARISON</div>
+      <div class="compare-machine-list">${programBUnits || '<div class="compare-empty">PROGRAM B CONTAINS NO PARSED UNITS</div>'}</div>
+      ${removedUnits ? `<div class="compare-conversational-title removed">REMOVED FROM PROGRAM B · SHOWN FROM PROGRAM A</div><div class="compare-machine-list">${removedUnits}</div>` : ""}`;
+    }
+
+    function updateCompareReadyState() {
+      compareRunButton.disabled = !(compareDocuments.a && compareDocuments.b);
+    }
+
+    async function loadCompareProgram(slot, file) {
+      if (!file) return;
+      compareError.textContent = "";
+      const slotName = slot === "a" ? "PROGRAM A" : "PROGRAM B";
+      status.textContent = `LOADING ${slotName}`;
+      try {
+        const document = await readProgramFile(file);
+        if (document.kind !== "program") {
+          throw new Error(`${file.name} is not a PAM, PBM, PBD, or text program file.`);
+        }
+        const program = parseMazatrol(document.text);
+        program.sourceFileName = document.name;
+        program.sourceFormat = document.sourceFormat || "PAM";
+        program.convertedFromBinary = Boolean(document.convertedFromBinary);
+        compareDocuments[slot] = { document, program };
+        const nameTarget = slot === "a" ? compareAName : compareBName;
+        nameTarget.textContent = `${document.name} · ${program.header.programNumber || "UNKNOWN"} · ${program.metadata.unitCount} UNITS`;
+        updateCompareReadyState();
+        status.textContent = `${slotName} READY · ${program.metadata.unitCount} UNITS`;
+        if (compareDocuments.a && compareDocuments.b) runProgramComparison();
+      } catch (problem) {
+        compareDocuments[slot] = null;
+        const nameTarget = slot === "a" ? compareAName : compareBName;
+        nameTarget.textContent = `SELECT ${slotName}`;
+        compareError.textContent = problem.message;
+        updateCompareReadyState();
+        status.textContent = "COMPARE FILE ERROR";
+      }
+    }
+
+    function runProgramComparison() {
+      if (!(compareDocuments.a && compareDocuments.b)) {
+        compareError.textContent = "Load both Program A and Program B before comparing.";
+        return;
+      }
+      compareError.textContent = "";
+      const result = analyzeProgramComparison(compareDocuments.a.program, compareDocuments.b.program);
+      renderProgramComparison(result);
+      status.textContent = result.differences.length
+        ? `${result.differences.length} DIFFERENCE SECTION${result.differences.length === 1 ? "" : "S"} · ${result.changedLines} VALUE CHANGES · ${result.addedLines} B ADDITIONS · ${result.removedLines} A REMOVALS`
+        : "PROGRAMS MATCH";
+    }
+
+    function resetProgramComparison() {
+      compareDocuments.a = null;
+      compareDocuments.b = null;
+      compareAInput.value = "";
+      compareBInput.value = "";
+      compareAName.textContent = "SELECT PROGRAM A";
+      compareBName.textContent = "SELECT PROGRAM B";
+      compareError.textContent = "";
+      compareResults.innerHTML = '<div class="compare-empty">LOAD PROGRAM A AND PROGRAM B TO COMPARE THEIR HEADERS, UNITS, AND COMMAND BLOCKS</div>';
+      updateCompareReadyState();
+      status.textContent = "READY · BUILD v4.2";
+    }
+
+    compareAInput.addEventListener("change", event => {
+      loadCompareProgram("a", event.target.files?.[0]);
+    });
+    compareBInput.addEventListener("change", event => {
+      loadCompareProgram("b", event.target.files?.[0]);
+    });
+    compareRunButton.addEventListener("click", runProgramComparison);
+    compareResetButton.addEventListener("click", resetProgramComparison);
+    window.analyzeProgramComparison = analyzeProgramComparison;
+    window.runProgramComparison = runProgramComparison;
+
     async function loadFiles(fileList) {
       const files = [...fileList];
       if (!files.length) return;
@@ -4450,7 +5199,6 @@
         if (toolDataResults.length) {
           loadedToolData = toolDataResults[toolDataResults.length - 1].database;
           renderDbmToolData(loadedToolData);
-          viewTabs.hidden = false;
           status.textContent = `${loadedToolData.occupiedCount} TOOLS · ${loadedToolData.slotCount} MAGAZINE SLOTS · ${(loadedToolData.sourceFormat || "DBM")} LOADED`;
           activateView("tool-data");
         }
@@ -4458,8 +5206,6 @@
           loadedEiaDocuments = eiaResults;
           activeEiaIndex = 0;
           renderEiaDocument(0);
-          eiaTabButton.hidden = false;
-          viewTabs.hidden = false;
           status.textContent = `${eiaResults.length} EIA FILE${eiaResults.length === 1 ? "" : "S"} · PLAIN TEXT`;
           activateView("eia");
         }
@@ -4479,6 +5225,7 @@
     }));
     dropZone.addEventListener("drop", event => loadFiles(event.dataTransfer.files));
 
+    renderToolSummary([]);
   </script>
 </body>
 </html>
