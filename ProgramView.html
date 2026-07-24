@@ -244,13 +244,14 @@
     .dbm-magazine-label { min-width: 195px; padding: 1px 20px; border: 1px solid #111; border-radius: 8px; color: #001629; background: #ededed; text-align: center; font-size: 1.12rem; }
     .dbm-file-name { color: #33465a; font-size: .82rem; }
     .dbm-table-wrap { max-height: calc(100vh - 220px); overflow: auto; padding: 0 8px 10px; background: #e8e8e8; }
-    .dbm-table { width: 100%; min-width: 920px; border-collapse: separate; border-spacing: 0; table-layout: fixed; font-size: 1.08rem; }
+    .dbm-table { width: 100%; min-width: 960px; border-collapse: separate; border-spacing: 0; table-layout: fixed; font-size: 1.08rem; }
     .dbm-table th { position: sticky; top: 0; z-index: 2; height: 41px; padding: 3px 8px; border-top: 1px solid #111; border-right: 1px solid #111; border-bottom: 3px double #555; color: #34404c; background: #e8e8e8; text-align: left; vertical-align: bottom; font-size: .78rem; font-weight: 400; }
     .dbm-table th:first-child { border-left: 1px solid #111; }
     .dbm-table td { height: 44px; padding: 3px 9px; color: #3c4148; background: #f3f3f3; border: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .dbm-table tr:nth-child(even) td { background: #e6e7f2; }
     .dbm-table tr.selected td { color: #fff; background: #11bdea; }
-    .dbm-table .dbm-number { width: 74px; padding-left: 12px; text-align: center; }
+    .dbm-table .dbm-number { width: 66px; padding-left: 10px; text-align: center; }
+    .dbm-table .dbm-pocket { width: 66px; text-align: center; }
     .dbm-table .dbm-tool { width: 190px; }
     .dbm-table .dbm-nominal { width: 168px; text-align: center; }
     .dbm-table .dbm-status { width: 82px; }
@@ -305,9 +306,9 @@
         <div class="input-body">
           <label class="drop-zone" id="dropZone" for="fileInput">
             LOAD PROGRAM OR TOOL DATA FILES
-            <small>.PAM · .PBM · .PBD · .TXT · .DBM</small>
+            <small>.PAM · .PBM · .PBD · .TXT · .DBM · .DBD</small>
           </label>
-          <input id="fileInput" type="file" accept=".pam,.pbm,.pbd,.dbm,.txt,text/plain,application/octet-stream" multiple>
+          <input id="fileInput" type="file" accept=".pam,.pbm,.pbd,.dbm,.dbd,.txt,text/plain,application/octet-stream" multiple>
           <textarea id="source" spellcheck="false" aria-label="Raw PAM data" placeholder="Uploaded PAM programs will appear here" readonly></textarea>
           <div class="error" id="error" role="alert"></div>
         </div>
@@ -338,10 +339,10 @@
     <section class="dbm-view" id="toolDataView" hidden>
       <div class="dbm-toolbar">
         <span class="dbm-magazine-label">MAGAZINE</span>
-        <span class="dbm-file-name" id="toolDataFileName">NO DBM LOADED</span>
+        <span class="dbm-file-name" id="toolDataFileName">NO TOOL DATA LOADED</span>
       </div>
       <div class="dbm-table-wrap" id="toolDataTable">
-        <div class="dbm-empty">UPLOAD TOOLDATA.DBM TO VIEW THE MACHINE MAGAZINE</div>
+        <div class="dbm-empty">UPLOAD TOOLDATA.DBM OR TOOLDATA.DBD TO VIEW THE MACHINE MAGAZINE</div>
       </div>
     </section>
 
@@ -941,6 +942,115 @@
     window.detectDbmToolSection = detectDbmToolSection;
     window.decodeDbmToolData = decodeDbmToolData;
     // ---------- End DBM tool-data adapter ----------
+
+    // ---------- DBD Matrix-control tool-data adapter ----------
+    const DBD_TOOL_RECORD_SIZE = 256;
+    const DBD_TRAILER_SIZE = 4;
+    const DBD_TOOL_SECTION_HEADER_SIZE = 248;
+    const DBD_TOOL_SECTION_SPAN_OFFSET = 168;
+    const DBD_POCKET_TABLE_START = 252;
+    const DBD_POCKET_RECORD_SIZE = 48;
+    const DBD_MAX_TOOL_COUNT = 512;
+
+    function detectDbdToolSection(arrayBuffer) {
+      if (!arrayBuffer || arrayBuffer.byteLength < DBD_POCKET_TABLE_START + DBD_POCKET_RECORD_SIZE) {
+        throw new Error("DBD file is too small to contain a Mazak Matrix database header.");
+      }
+      const view = new DataView(arrayBuffer);
+      const firstSectionSpan = view.getUint32(DBM_FIRST_SECTION_SPAN_OFFSET, true);
+      const secondSectionSpan = view.getUint32(DBM_SECOND_SECTION_SPAN_OFFSET, true);
+      const toolSectionSpan = view.getUint32(DBD_TOOL_SECTION_SPAN_OFFSET, true);
+      const sectionBase = firstSectionSpan + secondSectionSpan;
+      const start = sectionBase + DBD_TOOL_SECTION_HEADER_SIZE;
+      if (
+        firstSectionSpan === 0 ||
+        secondSectionSpan === 0 ||
+        toolSectionSpan === 0 ||
+        toolSectionSpan % DBD_TOOL_RECORD_SIZE !== 0 ||
+        start + toolSectionSpan + DBD_TRAILER_SIZE !== arrayBuffer.byteLength
+      ) {
+        throw new Error("DBD Matrix tool-section boundaries are not recognized.");
+      }
+      const slotCount = toolSectionSpan / DBD_TOOL_RECORD_SIZE;
+      if (!Number.isInteger(slotCount) || slotCount < 1 || slotCount > DBD_MAX_TOOL_COUNT) {
+        throw new Error(`Unsupported DBD magazine capacity (${slotCount} slots).`);
+      }
+      if (DBD_POCKET_TABLE_START + slotCount * DBD_POCKET_RECORD_SIZE > firstSectionSpan) {
+        throw new Error("DBD pocket-number table is incomplete.");
+      }
+      let plausibleRecords = 0;
+      let plausiblePocketLinks = 0;
+      for (let index = 0; index < slotCount; index += 1) {
+        const base = start + index * DBD_TOOL_RECORD_SIZE;
+        const shape = view.getUint16(base + 12, true);
+        if (shape >= 0 && shape <= 19) plausibleRecords += 1;
+        const pocketBase = DBD_POCKET_TABLE_START + index * DBD_POCKET_RECORD_SIZE;
+        if (view.getUint16(pocketBase, true) === index + 1) plausiblePocketLinks += 1;
+      }
+      if (plausibleRecords / slotCount < 0.9 || plausiblePocketLinks / slotCount < 0.9) {
+        throw new Error("DBD Matrix tool-record layout is not recognized.");
+      }
+      return {
+        start,
+        slotCount,
+        sectionBase,
+        firstSectionSpan,
+        secondSectionSpan,
+        toolSectionSpan
+      };
+    }
+
+    function decodeDbdToolData(arrayBuffer, fileName = "TOOLDATA.DBD") {
+      const bytes = new Uint8Array(arrayBuffer);
+      const view = new DataView(arrayBuffer);
+      const layout = detectDbdToolSection(arrayBuffer);
+      const tools = [];
+      for (let index = 0; index < layout.slotCount; index += 1) {
+        const base = layout.start + index * DBD_TOOL_RECORD_SIZE;
+        const record = bytes.subarray(base, base + DBD_TOOL_RECORD_SIZE);
+        const pocketBase = DBD_POCKET_TABLE_START + index * DBD_POCKET_RECORD_SIZE;
+        const shapeCode = view.getUint16(base + 12, true);
+        const suffixRaw = view.getUint16(base + 14, true);
+        const suffixCode = suffixRaw & 0xff;
+        const suffix = DBM_SUFFIXES[suffixCode] || "";
+        const nominalRaw = view.getInt32(base + 24, true);
+        const actualRaw = view.getInt32(base + 28, true);
+        const lengthRaw = view.getInt32(base + 32, true);
+        const wearRaw = view.getInt32(base + 140, true);
+        const occupied = shapeCode > 0 || nominalRaw !== 0 || lengthRaw !== 0;
+        const isTap = shapeCode >= 4 && shapeCode <= 9;
+        tools.push({
+          toolNumber: index + 1,
+          pocketNumber: occupied ? view.getUint16(pocketBase + 2, true) : "",
+          occupied,
+          toolTypeCode: shapeCode,
+          toolType: occupied ? (DBM_TOOL_TYPES[shapeCode] || `TOOL ${shapeCode}`) : "",
+          suffix: isTap ? "" : suffix,
+          suffixWarning: !isTap && Boolean(suffixRaw & 0x8000),
+          nominal: occupied ? (isTap ? decodeDbmTapCallout(record, suffix) : formatDbmInches(nominalRaw)) : "",
+          length: occupied ? formatDbmInches(lengthRaw) : "",
+          actualDiameter: occupied && actualRaw ? formatDbmInches(actualRaw) : "♦",
+          wearZ: occupied ? formatDbmInches(wearRaw) : "",
+          status: "",
+          material: dbmAscii(bytes, base + 64, 32),
+          iconClass: shapeCode === 14 ? "face" : isTap ? "tap" : shapeCode === 18 ? "sensor" : ""
+        });
+      }
+      return {
+        fileName,
+        sourceFormat: "DBD",
+        format: "Mazak Matrix DBD Tool Data",
+        recordStart: layout.start,
+        recordSize: DBD_TOOL_RECORD_SIZE,
+        slotCount: layout.slotCount,
+        occupiedCount: tools.filter(tool => tool.occupied).length,
+        tools
+      };
+    }
+
+    window.detectDbdToolSection = detectDbdToolSection;
+    window.decodeDbdToolData = decodeDbdToolData;
+    // ---------- End DBD Matrix-control tool-data adapter ----------
 
     // ---------- Feature 1: pure parser engine ----------
     function decodeHexUtf8(hex) {
@@ -2933,17 +3043,19 @@
 
     function renderDbmToolData(database) {
       if (!database) {
-        toolDataFileName.textContent = "NO DBM LOADED";
-        toolDataTable.innerHTML = '<div class="dbm-empty">UPLOAD TOOLDATA.DBM TO VIEW THE MACHINE MAGAZINE</div>';
+        toolDataFileName.textContent = "NO TOOL DATA LOADED";
+        toolDataTable.innerHTML = '<div class="dbm-empty">UPLOAD TOOLDATA.DBM OR TOOLDATA.DBD TO VIEW THE MACHINE MAGAZINE</div>';
         return;
       }
       toolDataFileName.textContent = `${database.fileName} · ${database.occupiedCount} OF ${database.slotCount} SLOTS LOADED`;
+      const showPocketNumber = database.tools.some(tool => Object.prototype.hasOwnProperty.call(tool, "pocketNumber"));
       const rows = database.tools.map((tool, index) => {
         const selected = index === 0 && tool.occupied ? " selected" : "";
         const icon = tool.occupied ? `<span class="dbm-tool-icon ${escapeHtml(tool.iconClass)}" aria-hidden="true"></span>` : "";
         const suffix = tool.suffix ? `<span class="dbm-suffix${tool.suffixWarning ? " warning" : ""}">${escapeHtml(tool.suffix)}</span>` : "";
         return `<tr class="${selected}" data-tool-number="${tool.toolNumber}">
           <td class="dbm-number">${escapeHtml(tool.toolNumber)}</td>
+          ${showPocketNumber ? `<td class="dbm-pocket">${escapeHtml(tool.pocketNumber)}</td>` : ""}
           <td class="dbm-tool"><span class="dbm-tool-name">${icon}<span class="dbm-tool-label">${escapeHtml(tool.toolType)}</span></span></td>
           <td class="dbm-nominal">${escapeHtml(tool.nominal)}${suffix}</td>
           <td class="dbm-status">${escapeHtml(tool.status)}</td>
@@ -2954,7 +3066,7 @@
       }).join("");
       toolDataTable.innerHTML = `<table class="dbm-table">
         <thead><tr>
-          <th class="dbm-number">TNo.</th><th class="dbm-tool">TOOL</th><th class="dbm-nominal">NOM-Ø</th>
+          <th class="dbm-number">TNo.</th>${showPocketNumber ? '<th class="dbm-pocket">PKNo.</th>' : ""}<th class="dbm-tool">TOOL</th><th class="dbm-nominal">NOM-Ø</th>
           <th class="dbm-status">STAT.</th><th class="dbm-length">LENGTH</th><th class="dbm-actual">ACT-Ø</th>
           <th class="dbm-wear">WEAR COMP.<br>Z</th>
         </tr></thead><tbody>${rows}</tbody>
@@ -4084,14 +4196,17 @@
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
         const isMazatrolBinary = /\.(?:pbm|pbd)$/i.test(file.name);
-        const isDbm = /\.dbm$/i.test(file.name);
+        const isToolData = /\.(?:dbm|dbd)$/i.test(file.name);
+        const isDbd = /\.dbd$/i.test(file.name);
         reader.onload = () => {
           try {
-            if (isDbm) {
+            if (isToolData) {
               resolve({
                 kind: "toolData",
                 name: file.name,
-                database: decodeDbmToolData(reader.result, file.name)
+                database: isDbd
+                  ? decodeDbdToolData(reader.result, file.name)
+                  : decodeDbmToolData(reader.result, file.name)
               });
             } else if (isMazatrolBinary) {
               const profile = detectMazatrolBinaryProfile(reader.result, file.name);
@@ -4111,7 +4226,7 @@
           }
         };
         reader.onerror = () => reject(new Error(`${file.name} could not be read.`));
-        if (isMazatrolBinary || isDbm) reader.readAsArrayBuffer(file);
+        if (isMazatrolBinary || isToolData) reader.readAsArrayBuffer(file);
         else reader.readAsText(file);
       });
     }
@@ -4137,7 +4252,7 @@
           loadedToolData = toolDataResults[toolDataResults.length - 1].database;
           renderDbmToolData(loadedToolData);
           viewTabs.hidden = false;
-          status.textContent = `${loadedToolData.occupiedCount} TOOLS · ${loadedToolData.slotCount} MAGAZINE SLOTS · DBM LOADED`;
+          status.textContent = `${loadedToolData.occupiedCount} TOOLS · ${loadedToolData.slotCount} MAGAZINE SLOTS · ${(loadedToolData.sourceFormat || "DBM")} LOADED`;
           activateView("tool-data");
         }
         fileInput.value = "";
