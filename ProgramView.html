@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Mazatrol Conversational Viewer — Build v4.2 Value Compare</title>
+  <title>Mazatrol Conversational Viewer — Build v4.6 PBM Master Programs</title>
   <style>
     :root {
       --bg: #020607;
@@ -390,9 +390,9 @@
     <header class="machine-header">
       <div>
         <h1>MAZATROL CONVERSATIONAL VIEWER</h1>
-        <div class="subtitle">BUILD v4.2 · VALUE-LEVEL PROGRAM COMPARE · EIA · DBD/DBM TOOL DATA</div>
+        <div class="subtitle">BUILD v4.6 · PBM MASTER PROGRAMS · WPC · WPCSHIFT · INDEX · MMS · SUB PROGRAM · END</div>
       </div>
-      <div class="status" id="status">READY · BUILD v4.2</div>
+      <div class="status" id="status">READY · BUILD v4.6</div>
     </header>
 
     <nav class="view-tabs" id="viewTabs" aria-label="Application views">
@@ -658,16 +658,30 @@
           meta.preservedBinaryRecord = true;
           break;
         case 0x40: command = `G362U${unit}H${f(36)}Z${f(40)}R${f(44)}F${record[16] || 1}&Z${f(52)}A00000000Q0&E0`; break;
+        case 0x41:
+          // LINE RGT header. L2 preserves the side through the PAM-compatible
+          // transcription so the shared G362 parser can render the right-hand layout.
+          command = `G362U${unit}H${f(36)}Z${f(40)}R${f(44)}F${record[17] || 1}&Z${f(48)}&R${f(52)}A0B0J${f(56)}C${f(60)}L2Q0&E0`;
+          meta.binaryVariant = "line-right-0x41";
+          break;
         case 0x42:
           // LINE LFT header used by this PBD machine generation.
           command = `G362U${unit}H${f(36)}Z${f(40)}R${f(44)}F${record[17] || 1}&Z${f(48)}&R${f(52)}A0B0J${f(56)}C${f(60)}L1Q0&E0`;
           meta.binaryVariant = "line-left-0x42";
+          break;
+        case 0x50:
+          command = `G370U${unit}H${f(36)}I${f(40)}J${f(44)}C${f(48)}A0B0&E0`;
+          meta.binaryVariant = "chamfer-right-0x50";
           break;
         case 0x51:
           command = `G368U${unit}H${f(36)}I${f(40)}J${f(44)}C${f(48)}A0B0&E0(PBD-RECORD-0X51:${pbmBytesHex(record)})`;
           meta.binaryVariant = "chamfer-left-0x51";
           break;
         case 0x52: command = `G369U${unit}H${f(36)}I${f(40)}J${f(44)}C${f(48)}A00000000Q0B0&E0`; break;
+        case 0x53:
+          command = `G367U${unit}H${f(36)}I${f(40)}J${f(44)}C${f(48)}A00000000Q0B0&E0`;
+          meta.binaryVariant = "chamfer-in-0x53";
+          break;
         case 0x60: command = `G371U${unit}H${f(36)}Z${f(40)}I${record[9] || 1}&Z${f(44)}Q0&E0`; break;
         case 0x66: command = `G377U${unit}H${f(36)}Z${f(40)}D${f(60)}I${record[9]}J${record[10]}&Z${f(52)}&R${f(56)}F0Q0P0&E0`; break;
         default: return null;
@@ -688,7 +702,7 @@
       const machines = pbmMachineCodes(record, view, base);
       const pass = record[8] & 2 ? 1 : 0;
       const q = record[15] || 0;
-      const threadedCallout = [1, 3].includes(record[36]) && record[38] > 0 && (record[36] === 1 || record[39] > 0);
+      const threadedCallout = [1, 2, 3].includes(record[36]) && record[38] > 0 && (record[36] === 1 || record[39] > 0);
       let lead = `N${n}T${tool}&T0`;
 
       if (type === 0xB0 && threadedCallout) {
@@ -702,8 +716,11 @@
       lead += `S${speed}K0P${priority}`;
 
       if (type === 0xB1) {
-        if (parent.type === 0x52) {
-          return `${lead}X&${f(40)}Y&${f(44)}Q${q || 7}F0.I${spindle(60)}J${f(64)}${machines}B${pass}&Q0`;
+        if (parent.type === 0x52 || parent.type === 0x53) {
+          return `${lead}X&${f(40)}Y&${f(44)}Q7F0.I${spindle(60)}J${f(64)}${machines}B${pass}&Q0`;
+        }
+        if (parent.type === 0x50) {
+          return `${lead}X&${f(40)}Y&${f(44)}F0.I${spindle(60)}J${f(64)}${machines}B${pass}&Q0`;
         }
         if (parent.type === 0x40) {
           const zfd = record[14] ? pbmScaledByte(record[14], 10) : "";
@@ -711,6 +728,9 @@
         }
         if (parent.type === 0x42) {
           return `${lead}X&${f(40)}Y&${f(44)}Z${f(48)}I${spindle(60)}J${f(64)}${machines}B${pass}L1&Q0`;
+        }
+        if (parent.type === 0x41) {
+          return `${lead}X&${f(40)}Y&${f(44)}Z${f(48)}R${f(52)}I${spindle(60)}J${f(64)}${machines}B${pass}L2&Q0`;
         }
         return `${lead}X&${f(40)}Y&${f(44)}Z${f(48)}I${spindle(60)}J${f(64)}${machines}B${pass}&Q0`;
       }
@@ -748,11 +768,21 @@
       const n = pbmSequence(record, view, base);
       const f = offset => pbmNumber(pbmFixed(view, base, offset));
       if (type === 0xC0) return `N${n}A1Z${f(36)}X${f(40)}Y${f(44)}F0P0Q0R0`;
+      if (type === 0xC1 && [0x52, 0x53].includes(parent.type)) {
+        return `N${n}A2X${f(36)}Y${f(40)}&X${f(44)}&Y${f(48)}R${f(52)}&R${f(56)}&R${f(60)}&R${f(64)}B0`;
+      }
       if (type === 0xC1) return `N${n}A1X${f(36)}Y${f(40)}&X${f(44)}&Y${f(48)}B0`;
       const first = record[12] ? 1 : 0;
       if (parent.type === 0x42) {
         const corner = pbmInt(view, base, 60) ? `R${f(60)}` : "";
         return `N${n}A1X${f(40)}Y${f(44)}${corner}L1P0E0S${first}B1&W0`;
+      }
+      if (parent.type === 0x41) {
+        const corner = pbmInt(view, base, 60) ? `R${f(60)}` : "";
+        return `N${n}A1X${f(40)}Y${f(44)}${corner}L2P0E0S${first}B1&W0`;
+      }
+      if (parent.type === 0x50) {
+        return `N${n}A1X${f(40)}Y${f(44)}P0E0S${first}B1&W0`;
       }
       if (parent.type === 0x40) {
         const corner = pbmInt(view, base, 60) ? `R${f(60)}` : "";
@@ -842,10 +872,66 @@
 
     function decodePbdMeasurementRow(record, view, base) {
       const n = pbmSequence(record, view, base);
-      const patternCode = view.getUint32(base + 8, true);
+      const patternCode = record[8];
       const f = offset => pbmNumber(pbmFixed(view, base, offset));
       const preserved = `(PBD-RECORD-0XA2:${pbmBytesHex(record)})`;
       return `N${n}A${patternCode}X${f(36)}Y${f(40)}Z${f(44)}R${f(52)}${preserved}`;
+    }
+
+    function decodePbmMasterUnit(type, record, view, base) {
+      const unit = view.getUint16(base + 2, true);
+      const f = offset => pbmNumber(pbmFixed(view, base, offset));
+      if (type === 0x02) {
+        return {
+          command: `G383U${unit}V${record[8] || 0}X${f(36)}Y${f(40)}E${f(44)}Z${f(48)}`,
+          meta: { unit, type, binaryVariant: "master-wpc-0x02" }
+        };
+      }
+      if (type === 0x03) return decodePbmUnitHeader(type, record, view, base);
+      if (type === 0x05) {
+        const workNumber = pbmAscii(record, 36, 16);
+        return {
+          command: `G303U${unit}(${pbmHex(workNumber)})F0K0E1`,
+          meta: { unit, type, workNumber, binaryVariant: "master-subprogram-0x05" }
+        };
+      }
+      if (type === 0x04) {
+        return {
+          command: `G301U${unit}B0C0T0R1W0E1`,
+          meta: { unit, type, binaryVariant: "master-end-0x04" }
+        };
+      }
+      if (type === 0x08) {
+        return {
+          command: `G307U${unit}D${f(36)}P${view.getUint16(base + 22, true)}K${record[13] || 0}S1`,
+          meta: { unit, type, binaryVariant: "master-mms-0x08" }
+        };
+      }
+      if (type === 0x0C) {
+        const showXY = Boolean(record[4] & 0x30);
+        return {
+          command: `G382U${unit}${showXY ? `X${f(36)}Y${f(44)}` : ""}Z${f(40)}`,
+          meta: { unit, type, binaryVariant: "master-index-0x0c" }
+        };
+      }
+      if (type === 0x0F) {
+        return {
+          command: `G306U${unit}X${f(36)}Y${f(40)}Z${f(44)}D${f(48)}`,
+          meta: { unit, type, binaryVariant: "master-wpcshift-0x0f" }
+        };
+      }
+      return null;
+    }
+
+    function decodePbmMasterEndRow(record, view, base) {
+      const n = pbmSequence(record, view, base);
+      const parts = [`N${n}`];
+      for (let slot = 0; slot < 5; slot += 1) {
+        const code = record[8 + slot * 2];
+        const address = code >= 32 && code <= 126 ? String.fromCharCode(code) : "";
+        if (address) parts.push(`${address}${pbmNumber(pbmFixed(view, base, 36 + slot * 4))}`);
+      }
+      return parts.join("");
     }
 
     function preserveUnknownMazatrolRecord(type, record, view, base, recordIndex, profile, current) {
@@ -879,6 +965,7 @@
       const material = pbmAscii(bytes, profile.materialOffset, 16) || "MATERIAL";
       const initialZ = pbmNumber(view.getInt32(profile.initialZOffset, true) / PBM_FIXED_SCALE);
       const lines = [`O${programNumber}(${comment})`, `G300U0P0D0(${pbmHex(material)})Z${initialZ}A0B1G0`];
+      const isPbmMaster = profile.sourceFormat === "PBM" && bytes[profile.headerSize] === 0x02;
       let section = null;
       let current = { unit: 0, type: 0 };
 
@@ -894,14 +981,20 @@
         section = kind;
       }
 
-      const unitTypes = new Set([0x03, 0x04, 0x05, 0x06, 0x20, 0x21, 0x23, 0x24, 0x26, 0x27, 0x29, 0x40, 0x42, 0x51, 0x52, 0x60, 0x66]);
+      const unitTypes = new Set([0x03, 0x04, 0x05, 0x06, 0x20, 0x21, 0x23, 0x24, 0x26, 0x27, 0x29, 0x40, 0x41, 0x42, 0x50, 0x51, 0x52, 0x53, 0x60, 0x66]);
       const pbdMasterUnitTypes = new Set([0x02, 0x07, 0x08, 0x0A, 0x0C]);
+      const pbmMasterUnitTypes = new Set([0x02, 0x03, 0x04, 0x05, 0x08, 0x0C, 0x0F]);
       const recordCount = (arrayBuffer.byteLength - profile.headerSize) / PBM_RECORD_SIZE;
       for (let index = 0; index < recordCount; index += 1) {
         const base = profile.headerSize + index * PBM_RECORD_SIZE;
         const record = bytes.subarray(base, base + PBM_RECORD_SIZE);
         const type = record[0];
-        if (unitTypes.has(type)) {
+        if (isPbmMaster && pbmMasterUnitTypes.has(type)) {
+          closeSection();
+          const decoded = decodePbmMasterUnit(type, record, view, base);
+          current = decoded.meta;
+          lines.push(decoded.command);
+        } else if (unitTypes.has(type)) {
           closeSection();
           const decoded = decodePbmUnitHeader(type, record, view, base);
           if (!decoded) throw new Error(`Unsupported ${profile.sourceFormat} unit record 0x${type.toString(16)} at record ${index + 1}.`);
@@ -916,9 +1009,12 @@
         } else if (type === 0xA1) {
           openSection("geometry");
           lines.push(decodePbmManualRow(record, view, base, profile));
-        } else if (type === 0xA2 && profile.variant === "legacy-master" && current.type === 0x08) {
+        } else if (type === 0xA2 && (profile.variant === "legacy-master" || isPbmMaster) && current.type === 0x08) {
           openSection("geometry");
           lines.push(decodePbdMeasurementRow(record, view, base));
+        } else if (type === 0xA6 && isPbmMaster && current.type === 0x04) {
+          openSection("geometry");
+          lines.push(decodePbmMasterEndRow(record, view, base));
         } else if (type === 0xA0) {
           // PBD fixed-record files can include three auxiliary setup records
           // before Unit 1. Their values are already represented by the header.
@@ -1274,6 +1370,7 @@
         G305: "Manual Unit",
         G306: "WPC Shift",
         G307: "MMS Tool Sensor",
+        G383: "WPC",
         G350: "Drilling",
         G351: "Rough Counterbore",
         G353: "Reaming",
@@ -1281,8 +1378,10 @@
         G356: "Circle Mill",
         G359: "Non-Through Boring",
         G362: "Line Center",
+        G367: "Chamfer In",
         G368: "Chamfer Left",
         G369: "Chamfer Out",
+        G370: "Chamfer Right",
         G377: "Slot",
         G380: "Offset",
         G381: "Pallet Change",
@@ -1348,6 +1447,10 @@
           commands: ["G306"],
           fields: {}
         },
+        wpc: {
+          commands: ["G383"],
+          fields: {}
+        },
         measurement: {
           commands: ["G307"],
           fields: { D: "NOM-Ø", P: "No.", K: "U.SKIP", S: "$" }
@@ -1404,8 +1507,16 @@
           commands: ["G369"],
           fields: {}
         },
+        chamferIn: {
+          commands: ["G367"],
+          fields: {}
+        },
         chamferLeft: {
           commands: ["G368"],
+          fields: {}
+        },
+        chamferRight: {
+          commands: ["G370"],
           fields: {}
         },
         cborTap: {
@@ -1964,12 +2075,19 @@
       return parameter ? contextualValue(parameter).replace(/^&/, "") : "";
     }
 
-    function parseTappingHeader(block) {
-      const metric = manualParameter(block, "A")?.value === 1;
+    function tappingThreadCallout(block, metricFallback = false) {
+      const threadType = manualParameter(block, "A")?.value ?? null;
       const nominal = tappingValue(block, "D", 0);
+      const threadsPerInch = tappingValue(block, "V", 0);
+      if (threadType === 1 || (threadType === null && metricFallback)) return `M${nominal}`;
+      if (threadType === 2) return `UNn${nominal}${threadsPerInch ? `-${threadsPerInch}` : ""}`;
+      return nominal;
+    }
+
+    function parseTappingHeader(block) {
       return {
         unitName: "TAPPING",
-        nominalDiameter: `${metric ? "M" : ""}${nominal}`,
+        nominalDiameter: tappingThreadCallout(block),
         majorDiameter: tappingValue(block, "E", 0),
         pitch: tappingValue(block, "P", 0),
         tapDepth: tappingValue(block, "H", 0),
@@ -1984,13 +2102,13 @@
       const sCode = manualParameter(block, "S")?.value ?? null;
       const priorityInfo = parsedPriority(block);
       const isCenterDrill = toolNumber === 1;
-      const isTap = toolNumber === 4;
+      const isTap = toolNumber === 4 || toolNumber === 5;
       const nominal = tappingValue(block, "D", 0);
       return {
         sequenceNumber: Number(block.command.slice(1)),
         toolNumber,
         toolName: block.comments[0] || CONTEXTUAL_MAPPING_DICTIONARY.toolCallouts[toolNumber] || (isTap ? "TAP" : "DRILL"),
-        nominalDiameter: isTap ? `M${nominal}` : nominal,
+        nominalDiameter: isTap ? tappingThreadCallout(block, toolNumber === 4) : nominal,
         toolFlag: toolLetterFromS(sCode),
         priority: priorityInfo.rawValue || "",
         priorityIsLate: priorityInfo.isLate,
@@ -2033,10 +2151,13 @@
     function parseLineCenterHeader(block) {
       const startCode = manualParameter(block, "A")?.value ?? null;
       const endCode = manualParameter(block, "B")?.value ?? startCode;
-      const isLineLeft = manualParameter(block, "L")?.value === 1;
+      const sideCode = manualParameter(block, "L")?.value ?? 0;
+      const isLineLeft = sideCode === 1;
+      const isLineRight = sideCode === 2;
       return {
-        unitName: isLineLeft ? "LINE LFT" : "LINE CTR",
+        unitName: isLineLeft ? "LINE LFT" : (isLineRight ? "LINE RGT" : "LINE CTR"),
         isLineLeft,
+        isLineRight,
         depth: lineCenterValue(block, "H", 0),
         serviceZ: lineCenterValue(block, "Z", 0),
         serviceRadius: lineCenterValue(block, "R", 0),
@@ -2055,7 +2176,9 @@
       const toolNumber = manualParameter(block, "T")?.value ?? null;
       const sCode = manualParameter(block, "S")?.value ?? null;
       const priorityInfo = parsedPriority(block);
-      const isLineLeft = manualParameter(block, "L")?.value === 1;
+      const sideCode = manualParameter(block, "L")?.value ?? 0;
+      const isLineLeft = sideCode === 1;
+      const isLineRight = sideCode === 2;
       const zfdValue = lineCenterValue(block, "V", 0);
       const depthZ = lineCenterValue(block, "Z", 0);
       const finishPass = manualParameter(block, "B")?.value === 1;
@@ -2073,7 +2196,7 @@
         processType: "♦",
         zfd: zfdValue || "G01",
         depthZ: zfdValue && Number(depthZ) === 0 ? "♦" : depthZ,
-        widthR: isLineLeft ? "" : "♦",
+        widthR: isLineLeft ? "" : (isLineRight ? lineCenterValue(block, "R", 0) : "♦"),
         cuttingSpeed: lineCenterValue(block, "I", 0),
         feedRate: lineCenterValue(block, "J", 0),
         mCodes: [lineCenterValue(block, "MA"), lineCenterValue(block, "MB"), lineCenterValue(block, "MC")],
@@ -2193,7 +2316,7 @@
       };
     }
 
-    function parseWpcShiftHeader(block) {
+    function parseWpcHeader(block) {
       const wpcNumber = pbdMasterValue(block, "V");
       return {
         unitName: "WPC-",
@@ -2239,14 +2362,15 @@
     }
 
     function parseIndexingHeader(block) {
-      const direction = Number(pbdMasterValue(block, "E"));
+      const directionRaw = pbdMasterValue(block, "E");
+      const direction = directionRaw === "" ? null : Number(directionRaw);
       return {
         unitName: "INDEX",
-        turnPositionX: "",
-        turnPositionY: "",
+        turnPositionX: pbdMasterValue(block, "X"),
+        turnPositionY: pbdMasterValue(block, "Y"),
         turnPositionZ: pbdMasterValue(block, "Z"),
         angle: pbdMasterValue(block, "D"),
-        turnDirection: ({ 0: "CW", 1: "CCW", 2: "NEAR DIR." })[direction] || "",
+        turnDirection: direction === null ? "" : (({ 0: "CW", 1: "CCW", 2: "NEAR DIR." })[direction] || ""),
         raw: block.raw
       };
     }
@@ -2259,7 +2383,7 @@
       return {
         unitName: "SUB PRO",
         workNumber: block.decodedText || "",
-        workSuffix: externalMarker ? "E" : "",
+        workSuffix: externalMarker?.value ? "M" : "",
         dollarIndicator: "♦",
         repeat: repeatParameter?.value ? contextualValue(repeatParameter).replace(/^&/, "") : "",
         number: numberParameter?.value ? contextualValue(numberParameter).replace(/^&/, "") : "",
@@ -2271,16 +2395,18 @@
     function parseEndProgramHeader(block) {
       const continueParameter = manualParameter(block, "B");
       const numberParameter = manualParameter(block, "C");
+      const returnParameter = manualParameter(block, "R");
+      const executeParameter = manualParameter(block, "E");
       return {
         unitName: "END",
         continuous: continueParameter ? contextualValue(continueParameter).replace(/^&/, "") : "",
         number: numberParameter ? contextualValue(numberParameter).replace(/^&/, "") : "",
-        atc: "",
-        angle: "",
-        direction: "",
-        returnMode: "",
-        workNumber: "♦",
-        execute: "♦",
+        atc: pbdMasterValue(block, "T"),
+        angle: pbdMasterValue(block, "A"),
+        direction: pbdMasterValue(block, "D"),
+        returnMode: Number(returnParameter?.value) === 1 ? "ARB PT" : "",
+        workNumber: "",
+        execute: executeParameter ? "♦" : "",
         raw: block.raw
       };
     }
@@ -2299,6 +2425,46 @@
         intersectionRadius: chamferOutValue(block, "J", 0),
         chamfer: chamferOutValue(block, "C", 0),
         raw: block.raw
+      };
+    }
+
+    function parseEndProgramDataRow(block) {
+      return {
+        sequenceNumber: Number(block.command.slice(1)),
+        data: ["Z", "X", "Y", "A", "C"].map(address => ({
+          address,
+          value: pbdMasterValue(block, address)
+        })),
+        raw: block.raw
+      };
+    }
+
+    function parseWpcShiftHeader(block) {
+      return {
+        unitName: "WPCSHIFT",
+        shiftX: pbdMasterValue(block, "X"),
+        shiftY: pbdMasterValue(block, "Y"),
+        shiftZ: pbdMasterValue(block, "Z"),
+        coordTheta: pbdMasterValue(block, "D"),
+        raw: block.raw
+      };
+    }
+
+    function parseChamferInHeader(block) {
+      return {
+        ...parseChamferOutHeader(block),
+        unitName: "CHMF IN"
+      };
+    }
+
+    function parseChamferRightHeader(block) {
+      const startCode = manualParameter(block, "A")?.value ?? null;
+      const endCode = manualParameter(block, "B")?.value ?? startCode;
+      return {
+        ...parseChamferOutHeader(block),
+        unitName: "CHMF RGT",
+        start: startCode === 0 ? "OPEN" : "",
+        end: endCode === 0 ? "OPEN" : ""
       };
     }
 
@@ -2332,15 +2498,36 @@
     function parseChamferOutGeometryRow(block) {
       const secondX = chamferOutValue(block, "X", 1);
       const radius = chamferOutValue(block, "R", 0);
+      const patternCode = manualParameter(block, "A")?.value ?? null;
+      const corner = occurrence => {
+        const value = chamferOutValue(block, "R", occurrence);
+        return value && Number(value) !== 0 ? `R ${value}` : "";
+      };
       return {
         sequenceNumber: Number(block.command.slice(1)),
-        pattern: manualParameter(block, "A")?.value === 1 ? "LINE" : "",
+        pattern: patternCode === 2 ? "SQR" : (patternCode === 1 ? "LINE" : ""),
         p1x: chamferOutValue(block, "X", 0),
         p1y: chamferOutValue(block, "Y", 0),
         p3x: secondX || radius,
         p3y: chamferOutValue(block, "Y", 1),
-        corners: ["", "", "", ""],
+        corners: [corner(0), corner(1), corner(2), corner(3)],
         raw: block.raw
+      };
+    }
+
+    function parseChamferRightToolRow(block) {
+      return {
+        ...parseChamferOutToolRow(block),
+        processType: "♦",
+        zfd: "G01",
+        depthZ: "♦"
+      };
+    }
+
+    function parseChamferRightGeometryRow(block) {
+      return {
+        ...parseLineCenterGeometryRow(block),
+        rough: "♦"
       };
     }
 
@@ -2488,6 +2675,9 @@
       if (unitType === "wpcShift" && block.command === "G306") {
         block.wpcShiftHeader = parseWpcShiftHeader(block);
       }
+      if (unitType === "wpc" && block.command === "G383") {
+        block.wpcHeader = parseWpcHeader(block);
+      }
       if (unitType === "measurement" && block.command === "G307") {
         block.measurementHeader = parseMeasurementHeader(block);
       }
@@ -2502,6 +2692,18 @@
       }
       if (unitType === "endProgram" && block.command === "G301") {
         block.endProgramHeader = parseEndProgramHeader(block);
+      }
+      if (unitType === "endProgram" && /^N\d+$/i.test(block.command) && context.sectionCommand === "G420") {
+        block.endProgramDataRow = parseEndProgramDataRow(block);
+      }
+      if (unitType === "chamferIn" && block.command === "G367") {
+        block.chamferInHeader = parseChamferInHeader(block);
+      }
+      if (unitType === "chamferIn" && /^N\d+$/i.test(block.command) && context.sectionCommand === "G424") {
+        block.chamferInToolRow = parseChamferOutToolRow(block);
+      }
+      if (unitType === "chamferIn" && /^N\d+$/i.test(block.command) && context.sectionCommand === "G420") {
+        block.chamferInGeometryRow = parseChamferOutGeometryRow(block);
       }
       if (unitType === "chamferLeft" && block.command === "G368") {
         block.chamferLeftHeader = parseChamferLeftHeader(block);
@@ -2520,6 +2722,15 @@
       }
       if (unitType === "chamferOut" && /^N\d+$/i.test(block.command) && context.sectionCommand === "G420") {
         block.chamferOutGeometryRow = parseChamferOutGeometryRow(block);
+      }
+      if (unitType === "chamferRight" && block.command === "G370") {
+        block.chamferRightHeader = parseChamferRightHeader(block);
+      }
+      if (unitType === "chamferRight" && /^N\d+$/i.test(block.command) && context.sectionCommand === "G424") {
+        block.chamferRightToolRow = parseChamferRightToolRow(block);
+      }
+      if (unitType === "chamferRight" && /^N\d+$/i.test(block.command) && context.sectionCommand === "G420") {
+        block.chamferRightGeometryRow = parseChamferRightGeometryRow(block);
       }
       return block;
     }
@@ -2572,10 +2783,13 @@
               slotHeader: block.slotHeader || null,
               palletChangeHeader: block.palletChangeHeader || null,
               mCodeHeader: block.mCodeHeader || null,
+              wpcHeader: block.wpcHeader || null,
               wpcShiftHeader: block.wpcShiftHeader || null,
               indexingHeader: block.indexingHeader || null,
               subProgramHeader: block.subProgramHeader || null,
+              chamferInHeader: block.chamferInHeader || null,
               chamferOutHeader: block.chamferOutHeader || null,
+              chamferRightHeader: block.chamferRightHeader || null,
               endProgramHeader: block.endProgramHeader || null,
               name: block.decodedText,
               priority: null,
@@ -2600,10 +2814,13 @@
           if (block.slotHeader) currentUnit.slotHeader = block.slotHeader;
           if (block.palletChangeHeader) currentUnit.palletChangeHeader = block.palletChangeHeader;
           if (block.mCodeHeader) currentUnit.mCodeHeader = block.mCodeHeader;
+          if (block.wpcHeader) currentUnit.wpcHeader = block.wpcHeader;
           if (block.wpcShiftHeader) currentUnit.wpcShiftHeader = block.wpcShiftHeader;
           if (block.indexingHeader) currentUnit.indexingHeader = block.indexingHeader;
           if (block.subProgramHeader) currentUnit.subProgramHeader = block.subProgramHeader;
+          if (block.chamferInHeader) currentUnit.chamferInHeader = block.chamferInHeader;
           if (block.chamferOutHeader) currentUnit.chamferOutHeader = block.chamferOutHeader;
+          if (block.chamferRightHeader) currentUnit.chamferRightHeader = block.chamferRightHeader;
           if (block.endProgramHeader) currentUnit.endProgramHeader = block.endProgramHeader;
           if (!currentUnit.name && block.decodedText) currentUnit.name = block.decodedText;
           currentSequence = null;
@@ -2636,8 +2853,12 @@
             lineCenterGeometryRow: block.lineCenterGeometryRow || null,
             slotToolRow: block.slotToolRow || null,
             slotGeometryRow: block.slotGeometryRow || null,
+            chamferInToolRow: block.chamferInToolRow || null,
+            chamferInGeometryRow: block.chamferInGeometryRow || null,
             chamferOutToolRow: block.chamferOutToolRow || null,
             chamferOutGeometryRow: block.chamferOutGeometryRow || null,
+            chamferRightToolRow: block.chamferRightToolRow || null,
+            chamferRightGeometryRow: block.chamferRightGeometryRow || null,
             priority: block.priority,
             priorityRaw: block.priorityRaw,
             priorityIsLate: block.priorityIsLate,
@@ -2948,7 +3169,9 @@
             sequence.tappingToolRow || block.tappingToolRow ||
             sequence.lineCenterToolRow || block.lineCenterToolRow ||
             sequence.slotToolRow || block.slotToolRow ||
-            sequence.chamferOutToolRow || block.chamferOutToolRow;
+            sequence.chamferInToolRow || block.chamferInToolRow ||
+            sequence.chamferOutToolRow || block.chamferOutToolRow ||
+            sequence.chamferRightToolRow || block.chamferRightToolRow;
           if (row) {
             addCallout(unit, row, sequence.id, calloutIndex, unitLocations);
           } else if (block.tool) {
@@ -3771,7 +3994,7 @@
     function renderLineCenterUnit(unit) {
       const cycle = blockFor(unit, "G362") || unit.blocks[0];
       const header = unit.lineCenterHeader || cycle?.lineCenterHeader || parseLineCenterHeader(cycle);
-      if (header.isLineLeft) {
+      if (header.isLineLeft || header.isLineRight) {
         const headers = ["Unit No.", "UNIT", "", "DEPTH", "SRV-Z", "SRV-R", "RGH", "FIN-Z", "FIN-R", "START", "END", "INTER-R", "CHMF"].map(label => ({ label }));
         const row = [
           mzCell(unit.number, "row-no"), mzCell(header.unitName, "op"), mzCell(""), mzCell(header.depth),
@@ -3860,9 +4083,9 @@
       return `<section class="mz-unit">${renderMzTable(headers, [row], "unit-head")}</section>`;
     }
 
-    function renderWpcShiftUnit(unit) {
-      const block = blockFor(unit, "G306") || unit.blocks[0];
-      const header = unit.wpcShiftHeader || block?.wpcShiftHeader || parseWpcShiftHeader(block);
+    function renderWpcUnit(unit) {
+      const block = blockFor(unit, "G383") || unit.blocks[0];
+      const header = unit.wpcHeader || block?.wpcHeader || parseWpcHeader(block);
       const headers = [
         { label: "UNo." }, { label: "UNIT", colspan: 2 }, { label: "ADD. WPC" },
         { label: "X" }, { label: "Y" }, { label: "th" }, { label: "Z" }, { label: "" }, { label: "" }
@@ -3871,6 +4094,21 @@
         mzCell(unit.number, "row-no"), mzCell(header.unitName, "op"), mzCell(header.wpcNumber),
         mzCell(header.additionalWpc),
         mzCell(header.x), mzCell(header.y), mzCell(header.theta), mzCell(header.z), mzCell(""), mzCell("")
+      ];
+      return `<section class="mz-unit">${renderMzTable(headers, [row], "unit-head")}</section>`;
+    }
+
+    function renderWpcShiftUnit(unit) {
+      const block = blockFor(unit, "G306") || unit.blocks[0];
+      const header = unit.wpcShiftHeader || block?.wpcShiftHeader || parseWpcShiftHeader(block);
+      const headers = [
+        { label: "UNo." }, { label: "UNIT" }, { label: "SHIFT-X" },
+        { label: "SHIFT-Y" }, { label: "SHIFT-Z" }, { label: "COORD.th" }, { label: "" }
+      ];
+      const row = [
+        mzCell(unit.number, "row-no"), mzCell(header.unitName, "op"),
+        mzCell(header.shiftX), mzCell(header.shiftY), mzCell(header.shiftZ),
+        mzCell(header.coordTheta), mzCell("")
       ];
       return `<section class="mz-unit">${renderMzTable(headers, [row], "unit-head")}</section>`;
     }
@@ -3955,7 +4193,22 @@
         mzCell(header.atc), mzCell(header.angle), mzCell(header.direction), mzCell(header.returnMode), mzCell(""),
         mzCell(header.workNumber, "diamond"), mzCell(header.execute, "diamond")
       ];
-      return `<section class="mz-unit">${renderMzTable(headers, [row], "unit-head")}</section>`;
+      const dataHeaders = [
+        { label: "SNo." },
+        ...["DATA 1", "DATA 2", "DATA 3", "DATA 4", "DATA 5"].map(label => ({ label, colspan: 2 })),
+        { label: "DATA 6" }, { label: "DATA 7" }, { label: "DATA 8" }, { label: "DATA 9" }
+      ];
+      const dataRows = unit.sequences
+        .filter(sequence => sequence.contextCommand === "G420")
+        .map(sequence => {
+          const data = sequence.blocks[0].endProgramDataRow || parseEndProgramDataRow(sequence.blocks[0]);
+          return [
+            mzCell(data.sequenceNumber, "row-no"),
+            ...data.data.flatMap(item => [mzCell(item.address, "op left"), mzCell(item.value)]),
+            mzCell(""), mzCell(""), mzCell(""), mzCell("")
+          ];
+        });
+      return `<section class="mz-unit">${renderMzTable(headers, [row], "unit-head")}${dataRows.length ? renderMzTable(dataHeaders, dataRows, "fig-head") : ""}</section>`;
     }
 
     function renderChamferOutTools(unit) {
@@ -3964,11 +4217,14 @@
       const headers = ["SNo.", "TOOL", "NOM-Ø", "", "No.", "APRCH-X", "APRCH-Y", "TYPE", "ZFD", "DEP-Z", "WID-R", "C-SP", "FR", "M", "M", "M"].map(label => ({ label }));
       const rows = sequences.map(sequence => {
         const block = sequence.blocks[0];
-        const row = sequence.chamferOutToolRow || block.chamferOutToolRow || parseChamferOutToolRow(block);
+        const row = sequence.chamferInToolRow || block.chamferInToolRow ||
+          sequence.chamferOutToolRow || block.chamferOutToolRow ||
+          sequence.chamferRightToolRow || block.chamferRightToolRow ||
+          parseChamferOutToolRow(block);
         return [
           mzCell(row.sequenceNumber, "row-no"), mzCell(row.toolName, "op", `Tool No. ${row.toolNumber ?? ""}`),
           mzCell(row.nominalDiameter), mzCell(row.toolFlag, "green"), mzCell(row.priority, row.priorityIsLate ? "magenta" : "priority", "Execution priority"),
-          mzCell(row.approachX, "yellow"), mzCell(row.approachY, "yellow"), mzCell(row.processType, "left"),
+          mzCell(row.approachX, "yellow"), mzCell(row.approachY, "yellow"), mzCell(row.processType, row.processType === "♦" ? "diamond" : "left"),
           mzCell(row.zfd, "green left"), mzCell(row.depthZ, "diamond"), mzCell(row.widthR),
           mzCell(row.cuttingSpeed), mzCell(row.feedRate), ...row.mCodes.map(code => mzCell(code))
         ];
@@ -3982,7 +4238,9 @@
       const headers = ["FIG", "PTN", "P1X/CX", "P1Y/CY", "P3X/R", "P3Y", "CN1", "CN2", "CN3", "CN4"].map(label => ({ label }));
       const rows = sequences.map(sequence => {
         const block = sequence.blocks[0];
-        const row = sequence.chamferOutGeometryRow || block.chamferOutGeometryRow || parseChamferOutGeometryRow(block);
+        const row = sequence.chamferInGeometryRow || block.chamferInGeometryRow ||
+          sequence.chamferOutGeometryRow || block.chamferOutGeometryRow ||
+          parseChamferOutGeometryRow(block);
         return [mzCell(row.sequenceNumber, "row-no"), mzCell(row.pattern, "op"), mzCell(row.p1x), mzCell(row.p1y), mzCell(row.p3x), mzCell(row.p3y), ...row.corners.map(value => mzCell(value))];
       });
       return renderMzTable(headers, rows, "fig-head");
@@ -3994,6 +4252,42 @@
       const headers = ["Unit No.", "UNIT", "", "DEPTH", "INTER-AX", "INTER-R", "CHMF"].map(label => ({ label }));
       const row = [mzCell(unit.number, "row-no"), mzCell(header.unitName, "op"), mzCell(""), mzCell(header.depth), mzCell(header.intersectionAxis), mzCell(header.intersectionRadius), mzCell(header.chamfer)];
       return `<section class="mz-unit">${renderMzTable(headers, [row], "unit-head")}${renderChamferOutTools(unit)}${renderChamferOutGeometry(unit)}</section>`;
+    }
+
+    function renderChamferInUnit(unit) {
+      const cycle = blockFor(unit, "G367") || unit.blocks[0];
+      const header = unit.chamferInHeader || cycle?.chamferInHeader || parseChamferInHeader(cycle);
+      const headers = ["Unit No.", "UNIT", "", "DEPTH", "INTER-AX", "INTER-R", "CHMF"].map(label => ({ label }));
+      const row = [mzCell(unit.number, "row-no"), mzCell(header.unitName, "op"), mzCell(""), mzCell(header.depth), mzCell(header.intersectionAxis), mzCell(header.intersectionRadius), mzCell(header.chamfer)];
+      return `<section class="mz-unit">${renderMzTable(headers, [row], "unit-head")}${renderChamferOutTools(unit)}${renderChamferOutGeometry(unit)}</section>`;
+    }
+
+    function renderChamferRightGeometry(unit) {
+      const sequences = unit.sequences.filter(sequence => sequence.contextCommand === "G420");
+      if (!sequences.length) return "";
+      const headers = ["FIG", "PTN", "X", "Y", "R/th", "I", "J", "P", "CNR", "R-FEED", "RGH"].map(label => ({ label }));
+      const rows = sequences.map(sequence => {
+        const block = sequence.blocks[0];
+        const row = sequence.chamferRightGeometryRow || block.chamferRightGeometryRow || parseChamferRightGeometryRow(block);
+        return [
+          mzCell(row.sequenceNumber, "row-no"), mzCell(row.pattern, "op"), mzCell(row.x), mzCell(row.y),
+          mzCell(row.radiusThickness), mzCell(row.i), mzCell(row.j), mzCell(row.p),
+          mzCell(row.cornerRadius), mzCell(row.radiusFeed), mzCell(row.rough, "diamond")
+        ];
+      });
+      return renderMzTable(headers, rows, "fig-head");
+    }
+
+    function renderChamferRightUnit(unit) {
+      const cycle = blockFor(unit, "G370") || unit.blocks[0];
+      const header = unit.chamferRightHeader || cycle?.chamferRightHeader || parseChamferRightHeader(cycle);
+      const headers = ["Unit No.", "UNIT", "", "DEPTH", "INTER-AX", "INTER-R", "CHMF", "START", "END", ""].map(label => ({ label }));
+      const row = [
+        mzCell(unit.number, "row-no"), mzCell(header.unitName, "op"), mzCell(""),
+        mzCell(header.depth), mzCell(header.intersectionAxis), mzCell(header.intersectionRadius),
+        mzCell(header.chamfer), mzCell(header.start, "left"), mzCell(header.end, "left"), mzCell("")
+      ];
+      return `<section class="mz-unit">${renderMzTable(headers, [row], "unit-head")}${renderChamferOutTools(unit)}${renderChamferRightGeometry(unit)}</section>`;
     }
 
     function renderChamferLeftTools(unit) {
@@ -4203,6 +4497,7 @@
       if (blockFor(unit, "G305")) return "manual";
       if (blockFor(unit, "G306")) return "wpcShift";
       if (blockFor(unit, "G307")) return "measurement";
+      if (blockFor(unit, "G383")) return "wpc";
       if (blockFor(unit, "G300")) return "initialSetup";
       if (blockFor(unit, "G380")) return "offset";
       if (blockFor(unit, "G381")) return "palletChange";
@@ -4216,8 +4511,10 @@
       if (blockFor(unit, "G362")) return "lineCenter";
       if (blockFor(unit, "G377")) return "slot";
       if (blockFor(unit, "G356")) return "circleMill";
+      if (blockFor(unit, "G367")) return "chamferIn";
       if (blockFor(unit, "G368")) return "chamferLeft";
       if (blockFor(unit, "G369")) return "chamferOut";
+      if (blockFor(unit, "G370")) return "chamferRight";
       if (blockFor(unit, "G357")) return "drillTap";
       return "generic";
     }
@@ -4227,6 +4524,7 @@
         endProgram: renderEndProgramUnit,
         mCode: renderMCodeUnit,
         subProgram: renderSubProgramUnit,
+        wpc: renderWpcUnit,
         wpcShift: renderWpcShiftUnit,
         measurement: renderMeasurementUnit,
         palletChange: renderPalletChangeUnit,
@@ -4243,8 +4541,10 @@
         lineCenter: renderLineCenterUnit,
         slot: renderSlotUnit,
         circleMill: renderCircleMillUnit,
+        chamferIn: renderChamferInUnit,
         chamferLeft: renderChamferLeftUnit,
         chamferOut: renderChamferOutUnit,
+        chamferRight: renderChamferRightUnit,
         drillTap: renderDrillTapUnit,
         generic: renderGenericUnit
       };
@@ -5164,7 +5464,7 @@
       compareError.textContent = "";
       compareResults.innerHTML = '<div class="compare-empty">LOAD PROGRAM A AND PROGRAM B TO COMPARE THEIR HEADERS, UNITS, AND COMMAND BLOCKS</div>';
       updateCompareReadyState();
-      status.textContent = "READY · BUILD v4.2";
+      status.textContent = "READY · BUILD v4.6";
     }
 
     compareAInput.addEventListener("change", event => {
