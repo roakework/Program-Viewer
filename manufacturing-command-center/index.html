@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Manufacturing Command Center for executive operating rhythm, profitability, quality, materials, machines, and accountability." />
+  <title>Manufacturing Command Center</title>
+  <style>
+    :root {
+      --ink:#101923; --ink-2:#172432; --ink-3:#213244; --paper:#f3f6f8; --white:#fff;
+      --muted:#6c7884; --line:#d9e0e5; --orange:#f06d2f; --orange-2:#fff0e8;
+      --green:#16845b; --green-bg:#e7f6f0; --yellow:#b57807; --yellow-bg:#fff5d9;
+      --red:#c13c3c; --red-bg:#fdecec; --blue:#2764b4; --blue-bg:#eaf2fd; --purple:#7048a8;
+      --shadow:0 8px 28px rgba(16,25,35,.08); --radius:14px;
+    }
+    *{box-sizing:border-box}
+    html{font-size:16px}
+    body{margin:0;background:var(--paper);color:var(--ink);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;line-height:1.45}
+    button,input,select,textarea{font:inherit}
+    button{cursor:pointer}
+    .app{min-height:100vh;display:grid;grid-template-columns:248px 1fr}
+    .sidebar{background:var(--ink);color:#dfe7ed;padding:22px 16px;display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow:auto}
+    .brand{padding:4px 10px 23px;border-bottom:1px solid rgba(255,255,255,.1);margin-bottom:16px}
+    .brand strong{display:block;color:white;font-size:1.08rem;letter-spacing:.01em}
+    .brand span{display:block;color:#91a3b3;font-size:.78rem;margin-top:5px;text-transform:uppercase;letter-spacing:.12em}
+    .nav{display:grid;gap:5px}
+    .nav button{border:0;background:transparent;color:#b7c5d0;text-align:left;border-radius:9px;padding:11px 12px;font-weight:650;font-size:.92rem}
+    .nav button:hover{background:rgba(255,255,255,.07);color:white}
+    .nav button.active{background:var(--orange);color:white}
+    .side-foot{margin-top:auto;padding:18px 10px 0;border-top:1px solid rgba(255,255,255,.1);font-size:.78rem;color:#91a3b3}
+    .main{min-width:0}
+    .topbar{height:72px;background:rgba(255,255,255,.94);backdrop-filter:blur(12px);border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 28px;position:sticky;top:0;z-index:10}
+    .topbar h1{font-size:1.18rem;margin:0}
+    .topbar .date{color:var(--muted);font-size:.87rem}
+    .top-actions{display:flex;gap:9px;align-items:center}
+    .content{padding:26px 28px 54px;max-width:1540px;margin:0 auto}
+    .page{display:none}
+    .page.active{display:block}
+    .page-head{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;margin-bottom:20px}
+    .page-head h2{font-size:1.65rem;line-height:1.15;margin:0 0 5px}
+    .page-head p{margin:0;color:var(--muted);font-size:.92rem}
+    .row-actions{display:flex;gap:9px;flex-wrap:wrap}
+    .btn{border:1px solid var(--line);background:white;color:var(--ink);border-radius:9px;padding:9px 13px;font-weight:700;font-size:.86rem;box-shadow:0 1px 2px rgba(16,25,35,.04)}
+    .btn:hover{border-color:#aebac3;background:#fafcfd}
+    .btn.primary{background:var(--orange);border-color:var(--orange);color:white}
+    .btn.dark{background:var(--ink);border-color:var(--ink);color:white}
+    .btn.danger{color:var(--red)}
+    .btn.small{padding:6px 9px;font-size:.78rem}
+    .mobile-nav{display:none}
+    .card{background:white;border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
+    .card-head{padding:17px 19px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:16px;align-items:center}
+    .card-head h3{font-size:1rem;margin:0}
+    .card-head span{font-size:.78rem;color:var(--muted)}
+    .card-body{padding:19px}
+    .stat-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:18px}
+    .stat{background:white;border:1px solid var(--line);border-radius:12px;padding:17px;box-shadow:0 4px 18px rgba(16,25,35,.05)}
+    .stat .label{font-size:.78rem;color:var(--muted);font-weight:750;text-transform:uppercase;letter-spacing:.07em}
+    .stat .value{font-size:1.72rem;font-weight:800;margin:6px 0 2px;line-height:1.1}
+    .stat .note{font-size:.78rem;color:var(--muted)}
+    .stat.alert{border-left:4px solid var(--red)}
+    .stat.good{border-left:4px solid var(--green)}
+    .stat.warn{border-left:4px solid var(--yellow)}
+    .stat.info{border-left:4px solid var(--blue)}
+    .dashboard-grid{display:grid;grid-template-columns:1.45fr .9fr;gap:18px}
+    .stack{display:grid;gap:18px}
+    .priority-list{display:grid;gap:10px}
+    .priority{border:1px solid var(--line);border-radius:10px;padding:13px;display:grid;grid-template-columns:8px 1fr auto;gap:12px;align-items:start}
+    .priority-bar{width:8px;height:100%;min-height:44px;border-radius:6px;background:var(--orange)}
+    .priority h4{margin:0 0 4px;font-size:.93rem}
+    .priority p{margin:0;color:var(--muted);font-size:.8rem}
+    .priority .meta{text-align:right;font-size:.76rem;color:var(--muted);white-space:nowrap}
+    .section-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+    .focus{padding:18px;position:relative;overflow:hidden}
+    .focus:before{content:"";position:absolute;left:0;top:0;bottom:0;width:5px;background:var(--orange)}
+    .focus h3{margin:0 0 7px;font-size:1rem}
+    .focus p{margin:0 0 14px;color:var(--muted);font-size:.84rem}
+    .focus .number{font-size:1.45rem;font-weight:800}
+    .focus .caption{font-size:.75rem;color:var(--muted)}
+    .progress{height:7px;background:#e9eef2;border-radius:10px;overflow:hidden;margin-top:13px}
+    .progress span{display:block;height:100%;background:var(--orange);border-radius:10px}
+    .table-wrap{overflow:auto}
+    table{width:100%;border-collapse:collapse;min-width:760px}
+    th{text-align:left;background:#f7f9fa;color:#5d6974;font-size:.73rem;text-transform:uppercase;letter-spacing:.065em;padding:11px 12px;border-bottom:1px solid var(--line)}
+    td{padding:12px;border-bottom:1px solid #e8edf0;font-size:.84rem;vertical-align:middle}
+    tbody tr:hover{background:#fbfcfd}
+    tbody tr:last-child td{border-bottom:0}
+    td strong{font-size:.87rem}
+    .subtext{color:var(--muted);font-size:.76rem;margin-top:2px}
+    .pill{display:inline-flex;align-items:center;border-radius:99px;padding:4px 8px;font-size:.72rem;font-weight:800;white-space:nowrap}
+    .pill.green{background:var(--green-bg);color:var(--green)}
+    .pill.yellow{background:var(--yellow-bg);color:var(--yellow)}
+    .pill.red{background:var(--red-bg);color:var(--red)}
+    .pill.blue{background:var(--blue-bg);color:var(--blue)}
+    .pill.gray{background:#edf1f4;color:#5d6974}
+    .pill.purple{background:#f1eafa;color:var(--purple)}
+    .filters{display:flex;gap:9px;flex-wrap:wrap;margin-bottom:15px}
+    .filters input,.filters select{border:1px solid var(--line);background:white;border-radius:9px;padding:9px 11px;font-size:.84rem;min-width:150px}
+    .filters input{flex:1;min-width:220px}
+    .kpi-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+    .kpi{padding:17px}
+    .kpi-top{display:flex;justify-content:space-between;gap:12px;align-items:start}
+    .kpi h3{font-size:.88rem;margin:0;color:#334250}
+    .kpi .value{font-size:1.65rem;font-weight:800;margin:12px 0 3px}
+    .kpi .target{font-size:.77rem;color:var(--muted)}
+    .kpi .bar{height:6px;background:#e9eef2;border-radius:8px;margin-top:14px;overflow:hidden}
+    .kpi .bar span{height:100%;display:block;border-radius:8px}
+    .empty{padding:34px;text-align:center;color:var(--muted);font-size:.87rem}
+    .kanban{display:grid;grid-template-columns:repeat(4,minmax(235px,1fr));gap:14px;overflow:auto;padding-bottom:8px}
+    .column{background:#e9eef2;border-radius:12px;padding:10px;min-height:300px}
+    .column-head{display:flex;justify-content:space-between;align-items:center;padding:4px 4px 10px;font-size:.84rem;font-weight:800}
+    .column-head span{background:white;border-radius:99px;min-width:25px;text-align:center;padding:2px 6px;font-size:.72rem}
+    .task{background:white;border:1px solid #d5dde3;border-radius:9px;padding:12px;margin-bottom:9px;box-shadow:0 2px 7px rgba(16,25,35,.05)}
+    .task h4{font-size:.84rem;margin:0 0 8px}
+    .task-foot{display:flex;justify-content:space-between;gap:8px;font-size:.72rem;color:var(--muted)}
+    .task-actions{display:flex;gap:5px;margin-top:9px}
+    .task-actions button{border:0;background:#edf1f4;border-radius:6px;font-size:.7rem;padding:4px 7px;color:#44515d}
+    .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+    .field{display:grid;gap:6px}
+    .field.full{grid-column:1/-1}
+    .field label{font-size:.78rem;font-weight:750;color:#44515d}
+    .field input,.field select,.field textarea{width:100%;border:1px solid #cfd8df;border-radius:8px;padding:10px;background:white;color:var(--ink)}
+    .field textarea{min-height:90px;resize:vertical}
+    dialog{border:0;border-radius:15px;padding:0;width:min(650px,calc(100vw - 30px));box-shadow:0 25px 80px rgba(0,0,0,.3)}
+    dialog::backdrop{background:rgba(10,17,24,.62)}
+    .modal-head{display:flex;justify-content:space-between;gap:14px;padding:18px 20px;border-bottom:1px solid var(--line)}
+    .modal-head h3{margin:0;font-size:1.08rem}
+    .close{border:0;background:#edf1f4;border-radius:7px;width:30px;height:30px;font-size:1.1rem}
+    .modal-body{padding:20px}
+    .modal-foot{padding:15px 20px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:9px}
+    .metric-strip{display:grid;grid-template-columns:repeat(5,1fr);border:1px solid var(--line);border-radius:12px;background:white;margin-bottom:18px;overflow:hidden}
+    .metric-strip div{padding:15px;border-right:1px solid var(--line)}
+    .metric-strip div:last-child{border-right:0}
+    .metric-strip span{display:block;color:var(--muted);font-size:.73rem;text-transform:uppercase;font-weight:750}
+    .metric-strip strong{display:block;font-size:1.16rem;margin-top:4px}
+    .callout{background:var(--ink);color:white;border-radius:var(--radius);padding:19px;position:relative;overflow:hidden}
+    .callout:after{content:"";position:absolute;width:130px;height:130px;border:28px solid rgba(240,109,47,.22);border-radius:50%;right:-40px;top:-55px}
+    .callout h3{margin:0 0 6px;font-size:1rem}
+    .callout p{margin:0;color:#b8c6d0;font-size:.82rem;max-width:86%}
+    .callout .big{font-size:1.6rem;font-weight:800;margin-top:15px;color:white}
+    .quick-add{display:grid;grid-template-columns:1fr auto;gap:8px}
+    .quick-add input{border:1px solid var(--line);border-radius:8px;padding:9px 10px;min-width:0}
+    .settings-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+    .danger-zone{border-color:#edc7c7}
+    .toast{position:fixed;right:22px;bottom:22px;background:var(--ink);color:white;padding:12px 16px;border-radius:9px;box-shadow:var(--shadow);font-size:.84rem;z-index:99;opacity:0;transform:translateY(12px);pointer-events:none;transition:.2s}
+    .toast.show{opacity:1;transform:translateY(0)}
+    .money-input{width:108px;border:1px solid transparent;background:transparent;border-radius:6px;padding:6px}
+    .money-input:hover,.money-input:focus{border-color:var(--line);background:white;outline:none}
+    .editable{border-bottom:1px dashed #aab5bd;cursor:text}
+    @media(max-width:1100px){
+      .stat-grid{grid-template-columns:repeat(2,1fr)}
+      .section-grid,.kpi-grid{grid-template-columns:repeat(2,1fr)}
+      .dashboard-grid{grid-template-columns:1fr}
+      .metric-strip{grid-template-columns:repeat(3,1fr)}
+      .metric-strip div:nth-child(3){border-right:0}
+    }
+    @media(max-width:760px){
+      .app{display:block}
+      .sidebar{display:none}
+      .topbar{height:auto;min-height:64px;padding:12px 16px;align-items:flex-start}
+      .topbar .date{display:none}
+      .top-actions .btn:not(.primary){display:none}
+      .content{padding:18px 14px 88px}
+      .page-head{align-items:flex-start;flex-direction:column}
+      .page-head h2{font-size:1.4rem}
+      .stat-grid,.section-grid,.kpi-grid,.settings-grid{grid-template-columns:1fr}
+      .metric-strip{grid-template-columns:1fr 1fr}
+      .metric-strip div,.metric-strip div:nth-child(3){border-right:1px solid var(--line)}
+      .metric-strip div:nth-child(even){border-right:0}
+      .form-grid{grid-template-columns:1fr}
+      .field.full{grid-column:auto}
+      .mobile-nav{position:fixed;display:flex;left:0;right:0;bottom:0;background:white;border-top:1px solid var(--line);z-index:20;overflow:auto;padding:7px 8px calc(7px + env(safe-area-inset-bottom));gap:4px}
+      .mobile-nav button{border:0;background:transparent;border-radius:7px;padding:8px 10px;font-size:.71rem;font-weight:750;color:#65727d;white-space:nowrap}
+      .mobile-nav button.active{background:var(--orange-2);color:var(--orange)}
+      .kanban{grid-template-columns:repeat(4,270px)}
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand"><strong>Manufacturing Command Center</strong><span>Executive operating system</span></div>
+    <nav class="nav" id="desktopNav">
+      <button class="active" data-page="dashboard">Command Board</button>
+      <button data-page="initiatives">Initiatives</button>
+      <button data-page="scorecard">KPI Scorecard</button>
+      <button data-page="pricing">Pricing & Margin</button>
+      <button data-page="materials">Materials & Scrap</button>
+      <button data-page="machines">Machine Performance</button>
+      <button data-page="actions">Action Board</button>
+      <button data-page="settings">Data & Settings</button>
+    </nav>
+    <div class="side-foot">Private operating workspace<br><span id="saveStatus">All changes saved locally</span></div>
+  </aside>
+  <main class="main">
+    <header class="topbar">
+      <div><h1 id="pageTitle">Command Board</h1><div class="date" id="today"></div></div>
+      <div class="top-actions">
+        <button class="btn" onclick="exportData()">Export backup</button>
+        <button class="btn primary" onclick="openActionModal()">+ New action</button>
+      </div>
+    </header>
+    <div class="content">
+      <section class="page active" id="dashboard">
+        <div class="page-head"><div><h2>What needs attention now</h2><p>A short operating view of profitability, execution, and ownership.</p></div><div class="row-actions"><button class="btn" onclick="setPage('scorecard')">Review scorecard</button><button class="btn dark" onclick="openInitiativeModal()">+ Initiative</button></div></div>
+        <div class="stat-grid" id="headlineStats"></div>
+        <div class="dashboard-grid">
+          <div class="stack">
+            <div class="card">
+              <div class="card-head"><div><h3>President's priorities</h3><span>Ranked by urgency and financial impact</span></div><button class="btn small" onclick="setPage('initiatives')">Manage</button></div>
+              <div class="card-body"><div class="priority-list" id="priorityList"></div></div>
+            </div>
+            <div class="section-grid" id="focusCards"></div>
+          </div>
+          <div class="stack">
+            <div class="card">
+              <div class="card-head"><div><h3>Actions due</h3><span>Ownership due this week</span></div><button class="btn small" onclick="setPage('actions')">Open board</button></div>
+              <div class="card-body" id="dueActions"></div>
+            </div>
+            <div class="callout">
+              <h3>Annual improvement target</h3>
+              <p>Potential contribution from completed initiatives. Keep this conservative and verified.</p>
+              <div class="big" id="annualOpportunity">$0</div>
+            </div>
+            <div class="card">
+              <div class="card-head"><h3>Quick capture</h3><span>Turn an issue into an owner</span></div>
+              <div class="card-body"><div class="quick-add"><input id="quickAction" placeholder="What needs to happen?" /><button class="btn primary" onclick="quickAdd()">Add</button></div></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="page" id="initiatives">
+        <div class="page-head"><div><h2>Improvement initiatives</h2><p>Every major improvement has an owner, target, due date, and financial reason.</p></div><button class="btn primary" onclick="openInitiativeModal()">+ New initiative</button></div>
+        <div class="filters"><input id="initiativeSearch" placeholder="Search initiatives or owners" oninput="renderInitiatives()" /><select id="initiativeFilter" onchange="renderInitiatives()"><option value="all">All statuses</option><option>Active</option><option>At Risk</option><option>Complete</option><option>Planned</option></select></div>
+        <div class="card table-wrap"><table><thead><tr><th>Initiative</th><th>Owner</th><th>Category</th><th>Value</th><th>Due</th><th>Status</th><th>Progress</th><th></th></tr></thead><tbody id="initiativeRows"></tbody></table></div>
+      </section>
+
+      <section class="page" id="scorecard">
+        <div class="page-head"><div><h2>KPI scorecard</h2><p>Use a small number of measures that expose problems early.</p></div><button class="btn primary" onclick="openKpiModal()">+ Add KPI</button></div>
+        <div class="kpi-grid" id="kpiGrid"></div>
+      </section>
+
+      <section class="page" id="pricing">
+        <div class="page-head"><div><h2>Pricing and margin review</h2><p>Prioritize accounts and parts where price no longer reflects cost, complexity, or risk.</p></div><button class="btn primary" onclick="openReviewModal('pricing')">+ Price review</button></div>
+        <div class="metric-strip" id="pricingMetrics"></div>
+        <div class="card table-wrap"><table><thead><tr><th>Customer / family</th><th>Current sales</th><th>Gross margin</th><th>Target margin</th><th>Requested increase</th><th>Owner</th><th>Status</th><th></th></tr></thead><tbody id="pricingRows"></tbody></table></div>
+      </section>
+
+      <section class="page" id="materials">
+        <div class="page-head"><div><h2>Materials and scrap</h2><p>Turn aluminum purchasing and scrap recovery into managed profit centers.</p></div><button class="btn primary" onclick="openReviewModal('material')">+ Material action</button></div>
+        <div class="section-grid" id="materialCards"></div>
+        <div style="height:18px"></div>
+        <div class="card table-wrap"><table><thead><tr><th>Opportunity</th><th>Type</th><th>Baseline</th><th>Target</th><th>Annual value</th><th>Owner</th><th>Status</th><th></th></tr></thead><tbody id="materialRows"></tbody></table></div>
+      </section>
+
+      <section class="page" id="machines">
+        <div class="page-head"><div><h2>Machine performance</h2><p>Manage output losses by machine group—not anecdotes.</p></div><button class="btn primary" onclick="openMachineModal()">+ Machine group</button></div>
+        <div class="card table-wrap"><table><thead><tr><th>Machine / cell</th><th>Planned hours</th><th>Run hours</th><th>Utilization</th><th>Unplanned downtime</th><th>Parts / shift</th><th>Constraint</th><th></th></tr></thead><tbody id="machineRows"></tbody></table></div>
+      </section>
+
+      <section class="page" id="actions">
+        <div class="page-head"><div><h2>Action board</h2><p>No improvement exists until someone owns the next step.</p></div><button class="btn primary" onclick="openActionModal()">+ New action</button></div>
+        <div class="filters"><input id="actionSearch" placeholder="Search actions or owners" oninput="renderActions()" /><select id="actionOwner" onchange="renderActions()"><option value="all">All owners</option></select></div>
+        <div class="kanban" id="kanban"></div>
+      </section>
+
+      <section class="page" id="settings">
+        <div class="page-head"><div><h2>Data and settings</h2><p>Back up the hub or tailor the company baseline.</p></div></div>
+        <div class="settings-grid">
+          <div class="card"><div class="card-head"><h3>Company baseline</h3></div><div class="card-body"><div class="form-grid">
+            <div class="field"><label>Company name</label><input id="companyName" /></div>
+            <div class="field"><label>Annual sales</label><input id="annualSales" type="number" /></div>
+            <div class="field"><label>Gross margin target (%)</label><input id="marginTarget" type="number" step=".1" /></div>
+            <div class="field"><label>Machine count</label><input id="machineCount" type="number" /></div>
+            <div class="field"><label>Employee count</label><input id="employeeCount" type="number" /></div>
+            <div class="field"><label>Primary material</label><input id="primaryMaterial" /></div>
+            <div class="field full"><button class="btn primary" onclick="saveSettings()">Save baseline</button></div>
+          </div></div></div>
+          <div class="stack">
+            <div class="card"><div class="card-head"><h3>Backup and restore</h3></div><div class="card-body"><p style="margin-top:0;color:var(--muted);font-size:.84rem">Your data stays in this browser. Export a backup regularly, especially before changing computers.</p><div class="row-actions"><button class="btn dark" onclick="exportData()">Download JSON backup</button><label class="btn">Import backup<input type="file" accept=".json" onchange="importData(event)" hidden /></label></div></div></div>
+            <div class="card danger-zone"><div class="card-head"><h3>Reset hub</h3></div><div class="card-body"><p style="margin-top:0;color:var(--muted);font-size:.84rem">Remove all saved changes and restore the starter operating plan.</p><button class="btn danger" onclick="resetData()">Reset all data</button></div></div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+<nav class="mobile-nav" id="mobileNav"><button class="active" data-page="dashboard">Board</button><button data-page="initiatives">Initiatives</button><button data-page="scorecard">KPIs</button><button data-page="pricing">Pricing</button><button data-page="materials">Material</button><button data-page="machines">Machines</button><button data-page="actions">Actions</button><button data-page="settings">Settings</button></nav>
+
+<dialog id="initiativeModal"><form method="dialog" onsubmit="saveInitiative(event)"><div class="modal-head"><h3 id="initiativeModalTitle">New initiative</h3><button type="button" class="close" onclick="this.closest('dialog').close()">×</button></div><div class="modal-body"><div class="form-grid">
+  <input type="hidden" id="initiativeId" /><div class="field full"><label>Initiative</label><input id="initiativeTitle" required /></div>
+  <div class="field"><label>Owner</label><input id="initiativeOwner" required /></div><div class="field"><label>Category</label><select id="initiativeCategory"><option>Profitability</option><option>Pricing</option><option>Materials</option><option>Quality</option><option>Operations</option><option>People</option></select></div>
+  <div class="field"><label>Annual value ($)</label><input id="initiativeValue" type="number" min="0" /></div><div class="field"><label>Due date</label><input id="initiativeDue" type="date" /></div>
+  <div class="field"><label>Status</label><select id="initiativeStatus"><option>Planned</option><option>Active</option><option>At Risk</option><option>Complete</option></select></div><div class="field"><label>Progress (%)</label><input id="initiativeProgress" type="number" min="0" max="100" value="0" /></div>
+  <div class="field full"><label>Next milestone</label><textarea id="initiativeMilestone"></textarea></div>
+</div></div><div class="modal-foot"><button type="button" class="btn" onclick="this.closest('dialog').close()">Cancel</button><button class="btn primary">Save initiative</button></div></form></dialog>
+
+<dialog id="actionModal"><form method="dialog" onsubmit="saveAction(event)"><div class="modal-head"><h3 id="actionModalTitle">New action</h3><button type="button" class="close" onclick="this.closest('dialog').close()">×</button></div><div class="modal-body"><div class="form-grid">
+  <input type="hidden" id="actionId" /><div class="field full"><label>Action</label><input id="actionTitle" required /></div><div class="field"><label>Owner</label><input id="actionOwnerInput" required /></div><div class="field"><label>Due date</label><input id="actionDue" type="date" /></div><div class="field"><label>Priority</label><select id="actionPriority"><option>Critical</option><option selected>High</option><option>Normal</option><option>Low</option></select></div><div class="field"><label>Status</label><select id="actionStatus"><option>Backlog</option><option selected>In Progress</option><option>Waiting</option><option>Done</option></select></div><div class="field full"><label>Related area</label><select id="actionArea"><option>Profitability</option><option>Pricing</option><option>Materials</option><option>Quality</option><option>Machines</option><option>People</option><option>General</option></select></div>
+</div></div><div class="modal-foot"><button type="button" class="btn" onclick="this.closest('dialog').close()">Cancel</button><button class="btn primary">Save action</button></div></form></dialog>
+
+<dialog id="kpiModal"><form method="dialog" onsubmit="saveKpi(event)"><div class="modal-head"><h3 id="kpiModalTitle">Add KPI</h3><button type="button" class="close" onclick="this.closest('dialog').close()">×</button></div><div class="modal-body"><div class="form-grid">
+  <input type="hidden" id="kpiId" /><div class="field full"><label>KPI name</label><input id="kpiName" required /></div><div class="field"><label>Current value</label><input id="kpiValue" type="number" step=".01" required /></div><div class="field"><label>Target</label><input id="kpiTarget" type="number" step=".01" required /></div><div class="field"><label>Unit</label><select id="kpiUnit"><option>%</option><option>$</option><option>hours</option><option>days</option><option>count</option></select></div><div class="field"><label>Direction</label><select id="kpiDirection"><option value="higher">Higher is better</option><option value="lower">Lower is better</option></select></div><div class="field"><label>Owner</label><input id="kpiOwner" /></div><div class="field"><label>Frequency</label><select id="kpiFrequency"><option>Weekly</option><option>Monthly</option><option>Daily</option><option>Quarterly</option></select></div>
+</div></div><div class="modal-foot"><button type="button" class="btn" onclick="this.closest('dialog').close()">Cancel</button><button class="btn primary">Save KPI</button></div></form></dialog>
+
+<dialog id="reviewModal"><form method="dialog" onsubmit="saveReview(event)"><div class="modal-head"><h3 id="reviewModalTitle">New review</h3><button type="button" class="close" onclick="this.closest('dialog').close()">×</button></div><div class="modal-body"><div class="form-grid">
+  <input type="hidden" id="reviewId" /><input type="hidden" id="reviewType" /><div class="field full"><label id="reviewNameLabel">Customer / family</label><input id="reviewName" required /></div><div class="field"><label>Type</label><input id="reviewSubtype" /></div><div class="field"><label>Owner</label><input id="reviewOwner" /></div><div class="field"><label>Baseline</label><input id="reviewBaseline" type="number" step=".01" /></div><div class="field"><label>Target</label><input id="reviewTarget" type="number" step=".01" /></div><div class="field"><label>Annual sales / value ($)</label><input id="reviewSales" type="number" /></div><div class="field"><label>Requested increase (%)</label><input id="reviewIncrease" type="number" step=".1" /></div><div class="field"><label>Status</label><select id="reviewStatus"><option>Not Started</option><option>Analyzing</option><option>Ready</option><option>Presented</option><option>Accepted</option><option>Complete</option></select></div>
+</div></div><div class="modal-foot"><button type="button" class="btn" onclick="this.closest('dialog').close()">Cancel</button><button class="btn primary">Save review</button></div></form></dialog>
+
+<dialog id="machineModal"><form method="dialog" onsubmit="saveMachine(event)"><div class="modal-head"><h3 id="machineModalTitle">Machine group</h3><button type="button" class="close" onclick="this.closest('dialog').close()">×</button></div><div class="modal-body"><div class="form-grid">
+  <input type="hidden" id="machineId" /><div class="field full"><label>Machine or cell</label><input id="machineName" required /></div><div class="field"><label>Planned hours</label><input id="machinePlanned" type="number" step=".1" /></div><div class="field"><label>Run hours</label><input id="machineRun" type="number" step=".1" /></div><div class="field"><label>Unplanned downtime (hours)</label><input id="machineDown" type="number" step=".1" /></div><div class="field"><label>Parts per shift</label><input id="machineParts" type="number" step=".1" /></div><div class="field full"><label>Current constraint</label><input id="machineConstraint" /></div>
+</div></div><div class="modal-foot"><button type="button" class="btn" onclick="this.closest('dialog').close()">Cancel</button><button class="btn primary">Save machine group</button></div></form></dialog>
+
+<div class="toast" id="toast"></div>
+<script>
+const STORAGE_KEY='manufacturing-command-center-v1';
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+const future=(days)=>{const d=new Date();d.setDate(d.getDate()+days);return d.toISOString().slice(0,10)};
+const seed={
+  settings:{companyName:'Manufacturing Company',annualSales:0,marginTarget:25,machineCount:50,employeeCount:60,primaryMaterial:'6061 Aluminum'},
+  initiatives:[
+    {id:uid(),title:'Build part-level profitability model',owner:'VP / Finance',category:'Profitability',value:250000,due:future(45),status:'Active',progress:25,milestone:'Rank the bottom 20 part families by contribution margin.'},
+    {id:uid(),title:'Strategic customer price review',owner:'Sales / President',category:'Pricing',value:300000,due:future(60),status:'Active',progress:15,milestone:'Prepare evidence packages for the first five accounts.'},
+    {id:uid(),title:'6061 aluminum sourcing program',owner:'Purchasing',category:'Materials',value:175000,due:future(40),status:'Planned',progress:10,milestone:'Normalize price per pound and quote three supply agreements.'},
+    {id:uid(),title:'Scrap root-cause reduction',owner:'Quality / Operations',category:'Quality',value:140000,due:future(75),status:'Active',progress:20,milestone:'Pareto scrap by part number, machine, tool, and defect.'},
+    {id:uid(),title:'Machine constraint recovery',owner:'Operations',category:'Operations',value:200000,due:future(55),status:'At Risk',progress:10,milestone:'Identify the ten largest lost-hour causes.'}
+  ],
+  kpis:[
+    {id:uid(),name:'Gross margin',value:22,target:25,unit:'%',direction:'higher',owner:'Finance',frequency:'Monthly'},
+    {id:uid(),name:'On-time delivery',value:91,target:96,unit:'%',direction:'higher',owner:'Operations',frequency:'Weekly'},
+    {id:uid(),name:'Scrap rate',value:3.2,target:1.8,unit:'%',direction:'lower',owner:'Quality',frequency:'Weekly'},
+    {id:uid(),name:'Machine utilization',value:58,target:70,unit:'%',direction:'higher',owner:'Operations',frequency:'Weekly'},
+    {id:uid(),name:'Quote win rate',value:31,target:38,unit:'%',direction:'higher',owner:'Sales',frequency:'Monthly'},
+    {id:uid(),name:'Past-due actions',value:4,target:0,unit:'count',direction:'lower',owner:'Leadership',frequency:'Weekly'}
+  ],
+  actions:[
+    {id:uid(),title:'Export 12 months of sales by part number',owner:'Finance',due:future(5),priority:'Critical',status:'In Progress',area:'Profitability'},
+    {id:uid(),title:'Create customer price-increase evidence template',owner:'Sales',due:future(8),priority:'High',status:'In Progress',area:'Pricing'},
+    {id:uid(),title:'Request indexed aluminum bids from three suppliers',owner:'Purchasing',due:future(10),priority:'High',status:'Backlog',area:'Materials'},
+    {id:uid(),title:'Publish weekly scrap Pareto',owner:'Quality',due:future(6),priority:'High',status:'Waiting',area:'Quality'},
+    {id:uid(),title:'Define utilization calculation for all 50 machines',owner:'Operations',due:future(12),priority:'Normal',status:'Backlog',area:'Machines'}
+  ],
+  pricing:[],
+  materials:[
+    {id:uid(),name:'6061 purchase price normalization',subtype:'Purchasing',owner:'Purchasing',baseline:0,target:0,sales:175000,increase:0,status:'Analyzing'},
+    {id:uid(),name:'Improve scrap segregation and credit audit',subtype:'Scrap recovery',owner:'Operations',baseline:0,target:0,sales:50000,increase:0,status:'Not Started'},
+    {id:uid(),name:'Reduce excess saw allowance',subtype:'Yield',owner:'Engineering',baseline:0,target:0,sales:80000,increase:0,status:'Not Started'}
+  ],
+  machines:[
+    {id:uid(),name:'Horizontal machining centers',planned:400,run:250,down:36,parts:0,constraint:'Setup, fixture readiness, and unattended recovery'},
+    {id:uid(),name:'Vertical machining centers',planned:240,run:150,down:18,parts:0,constraint:'Scheduling and operator coverage'}
+  ]
+};
+let data=loadData();
+function loadData(){try{const saved=localStorage.getItem(STORAGE_KEY);return saved?Object.assign(structuredClone(seed),JSON.parse(saved)):structuredClone(seed)}catch(e){return structuredClone(seed)}}
+function persist(){localStorage.setItem(STORAGE_KEY,JSON.stringify(data));document.getElementById('saveStatus').textContent='Saved '+new Date().toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});}
+function money(n){return new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',maximumFractionDigits:0}).format(Number(n)||0)}
+function num(n,d=0){return new Intl.NumberFormat('en-US',{maximumFractionDigits:d}).format(Number(n)||0)}
+function fmtDate(s){if(!s)return '—';const d=new Date(s+'T12:00:00');return d.toLocaleDateString([],{month:'short',day:'numeric',year:'numeric'})}
+function daysTo(s){if(!s)return 999;const today=new Date();today.setHours(0,0,0,0);return Math.ceil((new Date(s+'T12:00:00')-today)/86400000)}
+function statusClass(s){if(['Complete','Accepted','Done','On Track'].includes(s))return 'green';if(['At Risk','Critical'].includes(s))return 'red';if(['Active','Analyzing','In Progress','Presented'].includes(s))return 'blue';if(['Waiting','Ready','Planned'].includes(s))return 'yellow';return 'gray'}
+function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),1800)}
+function setPage(id){
+  document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active',p.id===id));
+  document.querySelectorAll('[data-page]').forEach(b=>b.classList.toggle('active',b.dataset.page===id));
+  const label=document.querySelector('#desktopNav [data-page="'+id+'"]').textContent;
+  document.getElementById('pageTitle').textContent=label;
+  window.scrollTo({top:0,behavior:'smooth'});renderAll();
+}
+document.querySelectorAll('[data-page]').forEach(b=>b.addEventListener('click',()=>setPage(b.dataset.page)));
+document.getElementById('today').textContent=new Date().toLocaleDateString([],{weekday:'long',month:'long',day:'numeric',year:'numeric'});
+
+function renderDashboard(){
+  const active=data.initiatives.filter(x=>x.status==='Active'||x.status==='At Risk');
+  const risk=data.initiatives.filter(x=>x.status==='At Risk').length;
+  const overdue=data.actions.filter(x=>x.status!=='Done'&&daysTo(x.due)<0).length;
+  const total=data.initiatives.reduce((s,x)=>s+(Number(x.value)||0),0);
+  const avg=data.kpis.length?Math.round(data.kpis.reduce((s,k)=>s+kpiScore(k),0)/data.kpis.length):0;
+  document.getElementById('headlineStats').innerHTML=[
+    ['Active initiatives',active.length,risk+' at risk','info'],
+    ['Annual opportunity',money(total),'Unverified until completed','good'],
+    ['Scorecard health',avg+'%','Against current targets',avg>=85?'good':'warn'],
+    ['Overdue actions',overdue,overdue?'Requires owner review':'No overdue items',overdue?'alert':'good']
+  ].map(x=>'<div class="stat '+x[3]+'"><div class="label">'+x[0]+'</div><div class="value">'+x[1]+'</div><div class="note">'+x[2]+'</div></div>').join('');
+  document.getElementById('annualOpportunity').textContent=money(total);
+  const top=[...data.initiatives].filter(x=>x.status!=='Complete').sort((a,b)=>(b.status==='At Risk')-(a.status==='At Risk')||Number(b.value)-Number(a.value)).slice(0,5);
+  document.getElementById('priorityList').innerHTML=top.length?top.map((x,i)=>'<div class="priority"><div class="priority-bar" style="background:'+(x.status==='At Risk'?'var(--red)':'var(--orange)')+'"></div><div><h4>'+(i+1)+'. '+esc(x.title)+'</h4><p>'+esc(x.milestone||'Define the next milestone.')+'</p></div><div class="meta">'+esc(x.owner)+'<br>'+fmtDate(x.due)+'</div></div>').join(''):'<div class="empty">No active priorities.</div>';
+  const focus=[
+    ['Pricing discipline','Price reviews',data.pricing.length,Math.min(100,data.pricing.length*20)],
+    ['Material advantage','Open opportunities',data.materials.filter(x=>x.status!=='Complete').length,Math.min(100,data.materials.filter(x=>x.status==='Complete').length*34)],
+    ['Execution','Actions completed',data.actions.filter(x=>x.status==='Done').length,data.actions.length?Math.round(data.actions.filter(x=>x.status==='Done').length/data.actions.length*100):0]
+  ];
+  document.getElementById('focusCards').innerHTML=focus.map(x=>'<div class="card focus"><h3>'+x[0]+'</h3><p>'+x[1]+'</p><div class="number">'+x[2]+'</div><div class="progress"><span style="width:'+x[3]+'%"></span></div></div>').join('');
+  const due=[...data.actions].filter(x=>x.status!=='Done').sort((a,b)=>(a.due||'9999').localeCompare(b.due||'9999')).slice(0,6);
+  document.getElementById('dueActions').innerHTML=due.length?due.map(x=>'<div class="priority" style="grid-template-columns:1fr auto"><div><h4>'+esc(x.title)+'</h4><p>'+esc(x.owner)+' · '+esc(x.area)+'</p></div><div class="meta"><span class="pill '+(daysTo(x.due)<0?'red':daysTo(x.due)<=7?'yellow':'gray')+'">'+fmtDate(x.due)+'</span></div></div>').join(''):'<div class="empty">No open actions.</div>';
+}
+function renderInitiatives(){
+  const q=(document.getElementById('initiativeSearch')?.value||'').toLowerCase(), f=document.getElementById('initiativeFilter')?.value||'all';
+  const rows=data.initiatives.filter(x=>(f==='all'||x.status===f)&&(!q||(x.title+' '+x.owner+' '+x.category).toLowerCase().includes(q)));
+  document.getElementById('initiativeRows').innerHTML=rows.length?rows.map(x=>'<tr><td><strong>'+esc(x.title)+'</strong><div class="subtext">'+esc(x.milestone||'')+'</div></td><td>'+esc(x.owner)+'</td><td>'+esc(x.category)+'</td><td>'+money(x.value)+'</td><td>'+fmtDate(x.due)+'</td><td><span class="pill '+statusClass(x.status)+'">'+x.status+'</span></td><td><div style="min-width:100px"><strong>'+num(x.progress)+'%</strong><div class="progress" style="margin-top:5px"><span style="width:'+Math.min(100,x.progress)+'%"></span></div></div></td><td><button class="btn small" onclick="editInitiative(\''+x.id+'\')">Edit</button></td></tr>').join(''):'<tr><td colspan="8" class="empty">No initiatives match this view.</td></tr>';
+}
+function kpiScore(k){const v=Number(k.value),t=Number(k.target);if(!isFinite(v)||!isFinite(t))return 0;if(k.direction==='lower')return v===0?100:Math.min(100,Math.round((t/v)*100));return t===0?100:Math.min(100,Math.round((v/t)*100))}
+function fmtKpi(k,v){if(k.unit==='$')return money(v);if(k.unit==='%')return num(v,1)+'%';return num(v,1)+' '+k.unit}
+function renderKpis(){
+  document.getElementById('kpiGrid').innerHTML=data.kpis.length?data.kpis.map(k=>{const score=kpiScore(k),color=score>=100?'var(--green)':score>=80?'var(--yellow)':'var(--red)';return '<div class="card kpi"><div class="kpi-top"><div><h3>'+esc(k.name)+'</h3><div class="subtext">'+esc(k.owner||'Unassigned')+' · '+k.frequency+'</div></div><button class="btn small" onclick="editKpi(\''+k.id+'\')">Edit</button></div><div class="value">'+fmtKpi(k,k.value)+'</div><div class="target">Target: '+fmtKpi(k,k.target)+' · '+(k.direction==='higher'?'higher':'lower')+' is better</div><div class="bar"><span style="width:'+score+'%;background:'+color+'"></span></div></div>'}).join(''):'<div class="card empty">Add the first KPI.</div>';
+}
+function renderPricing(){
+  const sales=data.pricing.reduce((s,x)=>s+(Number(x.sales)||0),0), weighted=sales?data.pricing.reduce((s,x)=>s+(Number(x.baseline)||0)*(Number(x.sales)||0),0)/sales:0, increase=sales?data.pricing.reduce((s,x)=>s+(Number(x.increase)||0)*(Number(x.sales)||0),0)/sales:0, opportunity=data.pricing.reduce((s,x)=>s+(Number(x.sales)||0)*(Number(x.increase)||0)/100,0);
+  document.getElementById('pricingMetrics').innerHTML=[['Sales under review',money(sales)],['Weighted current margin',num(weighted,1)+'%'],['Weighted increase',num(increase,1)+'%'],['Annual price opportunity',money(opportunity)],['Reviews accepted',data.pricing.filter(x=>x.status==='Accepted').length]].map(x=>'<div><span>'+x[0]+'</span><strong>'+x[1]+'</strong></div>').join('');
+  document.getElementById('pricingRows').innerHTML=data.pricing.length?data.pricing.map(x=>'<tr><td><strong>'+esc(x.name)+'</strong><div class="subtext">'+esc(x.subtype||'')+'</div></td><td>'+money(x.sales)+'</td><td>'+num(x.baseline,1)+'%</td><td>'+num(x.target,1)+'%</td><td>'+num(x.increase,1)+'%</td><td>'+esc(x.owner||'—')+'</td><td><span class="pill '+statusClass(x.status)+'">'+x.status+'</span></td><td><button class="btn small" onclick="editReview(\'pricing\',\''+x.id+'\')">Edit</button></td></tr>').join(''):'<tr><td colspan="8" class="empty">Add customer or part-family reviews after profitability data is loaded.</td></tr>';
+}
+function renderMaterials(){
+  const value=data.materials.reduce((s,x)=>s+(Number(x.sales)||0),0);
+  document.getElementById('materialCards').innerHTML=[
+    ['Primary material',data.settings.primaryMaterial,'Manage by normalized $/lb, not invoice total.'],
+    ['Annual opportunities',money(value),'Potential value recorded across open material actions.'],
+    ['Open actions',data.materials.filter(x=>x.status!=='Complete').length,'Purchasing, yield, inventory, and scrap recovery.']
+  ].map(x=>'<div class="card focus"><h3>'+x[0]+'</h3><div class="number">'+x[1]+'</div><p style="margin-top:8px">'+x[2]+'</p></div>').join('');
+  document.getElementById('materialRows').innerHTML=data.materials.length?data.materials.map(x=>'<tr><td><strong>'+esc(x.name)+'</strong></td><td>'+esc(x.subtype||'—')+'</td><td>'+num(x.baseline,2)+'</td><td>'+num(x.target,2)+'</td><td>'+money(x.sales)+'</td><td>'+esc(x.owner||'—')+'</td><td><span class="pill '+statusClass(x.status)+'">'+x.status+'</span></td><td><button class="btn small" onclick="editReview(\'material\',\''+x.id+'\')">Edit</button></td></tr>').join(''):'<tr><td colspan="8" class="empty">No material opportunities entered.</td></tr>';
+}
+function renderMachines(){
+  document.getElementById('machineRows').innerHTML=data.machines.length?data.machines.map(x=>{const u=Number(x.planned)?Number(x.run)/Number(x.planned)*100:0;return '<tr><td><strong>'+esc(x.name)+'</strong></td><td>'+num(x.planned,1)+'</td><td>'+num(x.run,1)+'</td><td><span class="pill '+(u>=70?'green':u>=55?'yellow':'red')+'">'+num(u,1)+'%</span></td><td>'+num(x.down,1)+' hr</td><td>'+num(x.parts,1)+'</td><td>'+esc(x.constraint||'—')+'</td><td><button class="btn small" onclick="editMachine(\''+x.id+'\')">Edit</button></td></tr>'}).join(''):'<tr><td colspan="8" class="empty">Add a machine or production cell.</td></tr>';
+}
+function renderActions(){
+  const q=(document.getElementById('actionSearch')?.value||'').toLowerCase(), owner=document.getElementById('actionOwner')?.value||'all';
+  const owners=[...new Set(data.actions.map(x=>x.owner).filter(Boolean))].sort(), select=document.getElementById('actionOwner');
+  if(select){const current=select.value;select.innerHTML='<option value="all">All owners</option>'+owners.map(x=>'<option>'+esc(x)+'</option>').join('');select.value=owners.includes(current)?current:'all'}
+  const filtered=data.actions.filter(x=>(owner==='all'||x.owner===owner)&&(!q||(x.title+' '+x.owner+' '+x.area).toLowerCase().includes(q)));
+  const statuses=['Backlog','In Progress','Waiting','Done'];
+  document.getElementById('kanban').innerHTML=statuses.map(s=>{const items=filtered.filter(x=>x.status===s);return '<div class="column"><div class="column-head">'+s+'<span>'+items.length+'</span></div>'+items.map(x=>'<div class="task"><span class="pill '+(x.priority==='Critical'?'red':x.priority==='High'?'yellow':'gray')+'">'+x.priority+'</span><h4>'+esc(x.title)+'</h4><div class="task-foot"><span>'+esc(x.owner)+'</span><span>'+fmtDate(x.due)+'</span></div><div class="task-actions"><button onclick="moveAction(\''+x.id+'\',-1)">←</button><button onclick="editAction(\''+x.id+'\')">Edit</button><button onclick="moveAction(\''+x.id+'\',1)">→</button></div></div>').join('')+'</div>'}).join('');
+}
+function renderSettings(){const s=data.settings;['companyName','annualSales','marginTarget','machineCount','employeeCount','primaryMaterial'].forEach(id=>{const el=document.getElementById(id);if(el)el.value=s[id]??''})}
+function renderAll(){renderDashboard();renderInitiatives();renderKpis();renderPricing();renderMaterials();renderMachines();renderActions();renderSettings()}
+function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+
+function openInitiativeModal(x={}){document.getElementById('initiativeModalTitle').textContent=x.id?'Edit initiative':'New initiative';initiativeId.value=x.id||'';initiativeTitle.value=x.title||'';initiativeOwner.value=x.owner||'';initiativeCategory.value=x.category||'Profitability';initiativeValue.value=x.value||0;initiativeDue.value=x.due||future(30);initiativeStatus.value=x.status||'Planned';initiativeProgress.value=x.progress||0;initiativeMilestone.value=x.milestone||'';initiativeModal.showModal()}
+function editInitiative(id){openInitiativeModal(data.initiatives.find(x=>x.id===id))}
+function saveInitiative(e){e.preventDefault();const x={id:initiativeId.value||uid(),title:initiativeTitle.value.trim(),owner:initiativeOwner.value.trim(),category:initiativeCategory.value,value:Number(initiativeValue.value),due:initiativeDue.value,status:initiativeStatus.value,progress:Number(initiativeProgress.value),milestone:initiativeMilestone.value.trim()};upsert(data.initiatives,x);initiativeModal.close();persist();renderAll();toast('Initiative saved')}
+function openActionModal(x={}){document.getElementById('actionModalTitle').textContent=x.id?'Edit action':'New action';actionId.value=x.id||'';actionTitle.value=x.title||'';actionOwnerInput.value=x.owner||'';actionDue.value=x.due||future(7);actionPriority.value=x.priority||'High';actionStatus.value=x.status||'In Progress';actionArea.value=x.area||'General';actionModal.showModal()}
+function editAction(id){openActionModal(data.actions.find(x=>x.id===id))}
+function saveAction(e){e.preventDefault();const x={id:actionId.value||uid(),title:actionTitle.value.trim(),owner:actionOwnerInput.value.trim(),due:actionDue.value,priority:actionPriority.value,status:actionStatus.value,area:actionArea.value};upsert(data.actions,x);actionModal.close();persist();renderAll();toast('Action saved')}
+function quickAdd(){const el=document.getElementById('quickAction');if(!el.value.trim())return;data.actions.push({id:uid(),title:el.value.trim(),owner:'Unassigned',due:future(7),priority:'Normal',status:'Backlog',area:'General'});el.value='';persist();renderAll();toast('Action captured')}
+function moveAction(id,dir){const order=['Backlog','In Progress','Waiting','Done'],x=data.actions.find(x=>x.id===id),i=order.indexOf(x.status);x.status=order[Math.max(0,Math.min(3,i+dir))];persist();renderAll()}
+function openKpiModal(x={}){kpiModalTitle.textContent=x.id?'Edit KPI':'Add KPI';kpiId.value=x.id||'';kpiName.value=x.name||'';kpiValue.value=x.value??'';kpiTarget.value=x.target??'';kpiUnit.value=x.unit||'%';kpiDirection.value=x.direction||'higher';kpiOwner.value=x.owner||'';kpiFrequency.value=x.frequency||'Weekly';kpiModal.showModal()}
+function editKpi(id){openKpiModal(data.kpis.find(x=>x.id===id))}
+function saveKpi(e){e.preventDefault();const x={id:kpiId.value||uid(),name:kpiName.value.trim(),value:Number(kpiValue.value),target:Number(kpiTarget.value),unit:kpiUnit.value,direction:kpiDirection.value,owner:kpiOwner.value.trim(),frequency:kpiFrequency.value};upsert(data.kpis,x);kpiModal.close();persist();renderAll();toast('KPI saved')}
+function openReviewModal(type,x={}){reviewType.value=type;reviewModalTitle.textContent=x.id?'Edit '+(type==='pricing'?'price review':'material action'):'New '+(type==='pricing'?'price review':'material action');reviewNameLabel.textContent=type==='pricing'?'Customer / part family':'Material opportunity';reviewId.value=x.id||'';reviewName.value=x.name||'';reviewSubtype.value=x.subtype||'';reviewOwner.value=x.owner||'';reviewBaseline.value=x.baseline??'';reviewTarget.value=x.target??'';reviewSales.value=x.sales??'';reviewIncrease.value=x.increase??'';reviewStatus.value=x.status||'Not Started';reviewModal.showModal()}
+function editReview(type,id){openReviewModal(type,(type==='pricing'?data.pricing:data.materials).find(x=>x.id===id))}
+function saveReview(e){e.preventDefault();const x={id:reviewId.value||uid(),name:reviewName.value.trim(),subtype:reviewSubtype.value.trim(),owner:reviewOwner.value.trim(),baseline:Number(reviewBaseline.value),target:Number(reviewTarget.value),sales:Number(reviewSales.value),increase:Number(reviewIncrease.value),status:reviewStatus.value};upsert(reviewType.value==='pricing'?data.pricing:data.materials,x);reviewModal.close();persist();renderAll();toast('Review saved')}
+function openMachineModal(x={}){machineModalTitle.textContent=x.id?'Edit machine group':'Machine group';machineId.value=x.id||'';machineName.value=x.name||'';machinePlanned.value=x.planned??'';machineRun.value=x.run??'';machineDown.value=x.down??'';machineParts.value=x.parts??'';machineConstraint.value=x.constraint||'';machineModal.showModal()}
+function editMachine(id){openMachineModal(data.machines.find(x=>x.id===id))}
+function saveMachine(e){e.preventDefault();const x={id:machineId.value||uid(),name:machineName.value.trim(),planned:Number(machinePlanned.value),run:Number(machineRun.value),down:Number(machineDown.value),parts:Number(machineParts.value),constraint:machineConstraint.value.trim()};upsert(data.machines,x);machineModal.close();persist();renderAll();toast('Machine group saved')}
+function upsert(arr,x){const i=arr.findIndex(v=>v.id===x.id);i>=0?arr.splice(i,1,x):arr.push(x)}
+function saveSettings(){data.settings={companyName:companyName.value.trim(),annualSales:Number(annualSales.value),marginTarget:Number(marginTarget.value),machineCount:Number(machineCount.value),employeeCount:Number(employeeCount.value),primaryMaterial:primaryMaterial.value.trim()};persist();renderAll();toast('Baseline saved')}
+function exportData(){const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='manufacturing-command-center-backup-'+new Date().toISOString().slice(0,10)+'.json';a.click();URL.revokeObjectURL(a.href);toast('Backup downloaded')}
+function importData(e){const file=e.target.files[0];if(!file)return;const reader=new FileReader();reader.onload=()=>{try{const incoming=JSON.parse(reader.result);if(!incoming.settings||!Array.isArray(incoming.actions))throw new Error();data=incoming;persist();renderAll();toast('Backup restored')}catch(err){alert('That file is not a valid Command Center backup.')}};reader.readAsText(file);e.target.value=''}
+function resetData(){if(!confirm('Reset all Command Center data? Export a backup first if you may need it.'))return;data=structuredClone(seed);persist();renderAll();toast('Hub reset')}
+renderAll();
+</script>
+</body>
+</html>
