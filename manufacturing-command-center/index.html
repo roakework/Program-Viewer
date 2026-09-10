@@ -246,6 +246,33 @@
         <div class="card table-wrap"><table><thead><tr><th>Initiative</th><th>Priority</th><th>Owner</th><th>Category</th><th>Value</th><th>Due</th><th>Status</th><th>Progress</th><th></th></tr></thead><tbody id="initiativeRows"></tbody></table></div>
       </section>
 
+      <section class="page" id="profitability">
+<div class="page-head"><div><button class="btn small" onclick="setPage('initiatives')" style="margin-bottom:10px">← Back to initiatives</button><h2>Part-Level Profitability Manager</h2><p>Know what every part earns, why margins move, and what action is required.</p></div><button class="btn primary" onclick="openPartModal()">+ Add part</button></div>
+<div class="stat-grid" id="profitHeadline"></div>
+<div class="profit-tabs"><button class="active" data-profit-view="portfolio">Portfolio & Margin Matrix</button><button data-profit-view="calculator">Cost Calculator</button><button data-profit-view="scenario">What-If Simulation</button><button data-profit-view="sources">Data Sources & Roadmap</button></div>
+<div class="profit-view active" id="profit-portfolio">
+<div class="dashboard-grid"><div class="card"><div class="card-head"><div><h3>Gross Margin Matrix</h3><span>Volume from left to right · margin from bottom to top</span></div></div><div class="card-body"><div class="matrix" id="marginMatrix"></div></div></div>
+<div class="card"><div class="card-head"><div><h3>Automated repricing triggers</h3><span>Parts below the company margin target</span></div></div><div class="card-body" id="repricingList"></div></div></div>
+<div style="height:18px"></div><div class="card table-wrap"><table><thead><tr><th>Part</th><th>Annual volume</th><th>Net revenue</th><th>Actual cost</th><th>Profit / part</th><th>Margin</th><th>Variance</th><th>Action</th></tr></thead><tbody id="profitRows"></tbody></table></div></div>
+<div class="profit-view" id="profit-calculator"><div class="dashboard-grid">
+<div class="card"><div class="card-head"><div><h3>Run-size margin optimizer</h3><span>Find the MOQ required for target margin</span></div></div><div class="card-body"><div class="field"><label>Part</label><select id="moqPart" onchange="renderMoq()"></select></div><div class="field" style="margin-top:12px"><label>Target gross margin (%)</label><input id="moqTarget" type="number" value="25" step=".5" oninput="renderMoq()"></div><div class="callout" style="margin-top:16px"><h3>Minimum order quantity</h3><div class="big" id="moqResult">—</div><p id="moqExplanation"></p></div></div></div>
+<div class="card"><div class="card-head"><div><h3>Accounting logic</h3><span>Applied consistently to every part</span></div></div><div class="card-body"><div class="formula">Total Cost = (Raw Material + Surcharge)<br>+ (Machine Runtime × Machine Rate)<br>+ (Setup Time ÷ Batch Size × Setup Rate)<br>+ (Direct Labor Time × Labor Rate)<br>+ Allocated Overhead<br><br>Adjusted Cost = Total Cost ÷ (1 − Scrap Rate)<br>Net Revenue = Selling Price − Packaging − Freight<br>Part Profit = Net Revenue − Adjusted Cost</div></div></div></div>
+<div style="height:18px"></div><div class="card table-wrap"><table><thead><tr><th>Part</th><th>Material</th><th>Machine</th><th>Setup / part</th><th>Labor</th><th>Overhead</th><th>Scrap penalty</th><th>Adjusted cost</th></tr></thead><tbody id="costRows"></tbody></table></div></div>
+<div class="profit-view" id="profit-scenario"><div class="scenario-grid"><div class="card"><div class="card-head"><h3>Market assumptions</h3></div><div class="card-body">
+<div class="slider-row"><label>Material inflation <span id="materialShockLabel">0%</span></label><input id="materialShock" type="range" min="-20" max="40" value="0" oninput="renderScenario()"></div>
+<div class="slider-row"><label>Machine-rate change <span id="machineShockLabel">0%</span></label><input id="machineShock" type="range" min="-10" max="25" value="0" oninput="renderScenario()"></div>
+<div class="slider-row"><label>Overhead / energy change <span id="overheadShockLabel">0%</span></label><input id="overheadShock" type="range" min="-10" max="30" value="0" oninput="renderScenario()"></div><button class="btn" onclick="resetScenario()">Reset scenario</button></div></div>
+<div class="card table-wrap"><table><thead><tr><th>Part</th><th>Current margin</th><th>Simulated margin</th><th>Change</th><th>Result</th></tr></thead><tbody id="scenarioRows"></tbody></table></div></div></div>
+<div class="profit-view" id="profit-sources"><div class="source-grid">
+<div class="card source-card"><h3>ERP / Sales</h3><p>Invoices, realized selling prices, volumes, discounts, packaging, and freight.</p><span class="pill yellow">Mapping required</span></div>
+<div class="card source-card"><h3>Shop Floor / MES</h3><p>Cycle time, setup time, production quantity, and historical scrap.</p><span class="pill yellow">Mapping required</span></div>
+<div class="card source-card"><h3>Accounting / PLM</h3><p>BOMs, material costs, surcharges, labor rates, work-center rates, and overhead pools.</p><span class="pill yellow">Mapping required</span></div></div>
+<div style="height:18px"></div><div class="card"><div class="card-head"><h3>Implementation roadmap</h3></div><div class="card-body"><div class="priority-list">
+<div class="priority"><div class="priority-bar"></div><div><h4>Phase 1 · Verified manual model</h4><p>Load top-revenue parts, validate costing rules, and reconcile totals to accounting.</p></div><span class="pill blue">Current</span></div>
+<div class="priority"><div class="priority-bar" style="background:var(--blue)"></div><div><h4>Phase 2 · Data ingestion</h4><p>Import ERP invoices, routings, material ledgers, machine times, and scrap history.</p></div><span class="pill gray">Next</span></div>
+<div class="priority"><div class="priority-bar" style="background:var(--green)"></div><div><h4>Phase 3 · Automated alerts</h4><p>Recalculate nightly and route margin and repricing exceptions to owners.</p></div><span class="pill gray">Planned</span></div></div></div></div></div>
+</section>
+
       <section class="page" id="scorecard">
         <div class="page-head"><div><h2>KPI scorecard</h2><p>Use a small number of measures that expose problems early.</p></div><button class="btn primary" onclick="openKpiModal()">+ Add KPI</button></div>
         <div class="kpi-grid" id="kpiGrid"></div>
@@ -326,6 +353,19 @@
 <dialog id="machineModal"><form method="dialog" onsubmit="saveMachine(event)"><div class="modal-head"><h3 id="machineModalTitle">Machine group</h3><button type="button" class="close" onclick="this.closest('dialog').close()">×</button></div><div class="modal-body"><div class="form-grid">
   <input type="hidden" id="machineId" /><div class="field full"><label>Machine or cell</label><input id="machineName" required /></div><div class="field"><label>Planned hours</label><input id="machinePlanned" type="number" step=".1" /></div><div class="field"><label>Run hours</label><input id="machineRun" type="number" step=".1" /></div><div class="field"><label>Unplanned downtime (hours)</label><input id="machineDown" type="number" step=".1" /></div><div class="field"><label>Parts per shift</label><input id="machineParts" type="number" step=".1" /></div><div class="field full"><label>Current constraint</label><input id="machineConstraint" /></div>
 </div></div><div class="modal-foot"><button type="button" class="btn" onclick="this.closest('dialog').close()">Cancel</button><button class="btn primary">Save machine group</button></div></form></dialog>
+
+<dialog id="partModal"><form method="dialog" onsubmit="savePart(event)"><div class="modal-head"><h3 id="partModalTitle">Add part</h3><button type="button" class="close" onclick="partModal.close()">×</button></div><div class="modal-body"><div class="form-grid">
+<input type="hidden" id="partRecordId"><div class="field"><label>Part ID</label><input id="partIdInput" required></div><div class="field"><label>Description</label><input id="partNameInput" required></div>
+<div class="field"><label>Annual volume</label><input id="partVolumeInput" type="number" min="0"></div><div class="field"><label>Selling price / part</label><input id="partPriceInput" type="number" step=".01"></div>
+<div class="field"><label>Raw material / part</label><input id="partMaterialInput" type="number" step=".01"></div><div class="field"><label>Material surcharge / part</label><input id="partSurchargeInput" type="number" step=".01"></div>
+<div class="field"><label>Machine runtime (hours / part)</label><input id="partMachineHoursInput" type="number" step=".001"></div><div class="field"><label>Machine burden rate / hour</label><input id="partMachineRateInput" type="number" step=".01"></div>
+<div class="field"><label>Setup time (hours / batch)</label><input id="partSetupHoursInput" type="number" step=".01"></div><div class="field"><label>Setup burden rate / hour</label><input id="partSetupRateInput" type="number" step=".01"></div>
+<div class="field"><label>Typical batch size</label><input id="partBatchInput" type="number" min="1"></div><div class="field"><label>Direct labor hours / part</label><input id="partLaborHoursInput" type="number" step=".001"></div>
+<div class="field"><label>Direct labor rate / hour</label><input id="partLaborRateInput" type="number" step=".01"></div><div class="field"><label>Allocated overhead / part</label><input id="partOverheadInput" type="number" step=".01"></div>
+<div class="field"><label>Historical scrap rate (%)</label><input id="partScrapInput" type="number" step=".1"></div><div class="field"><label>Should-cost / part</label><input id="partShouldInput" type="number" step=".01"></div>
+<div class="field"><label>Packaging / part</label><input id="partPackagingInput" type="number" step=".01"></div><div class="field"><label>Allocated freight / part</label><input id="partFreightInput" type="number" step=".01"></div>
+</div></div><div class="modal-foot"><button type="button" class="btn danger" id="partDeleteBtn" hidden>Delete</button><button type="button" class="btn" onclick="partModal.close()">Cancel</button><button class="btn primary">Save part</button></div></form></dialog>
+<dialog id="partDetail"><div class="modal-head"><div><h3 id="partDetailTitle">Part profitability</h3><div class="subtext" id="partDetailMeta"></div></div><button type="button" class="close" onclick="partDetail.close()">×</button></div><div class="modal-body" id="partDetailBody"></div><div class="modal-foot"><button class="btn" onclick="partDetail.close()">Close</button><button class="btn primary" id="partDetailEdit">Edit cost inputs</button></div></dialog>
 
 <div class="toast" id="toast"></div>
 <script>
