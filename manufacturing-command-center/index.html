@@ -484,6 +484,49 @@ function renderMaterials(){
 function renderMachines(){
   document.getElementById('machineRows').innerHTML=data.machines.length?data.machines.map(x=>{const u=Number(x.planned)?Number(x.run)/Number(x.planned)*100:0;return '<tr><td><strong>'+esc(x.name)+'</strong></td><td>'+num(x.planned,1)+'</td><td>'+num(x.run,1)+'</td><td><span class="pill '+(u>=70?'green':u>=55?'yellow':'red')+'">'+num(u,1)+'%</span></td><td>'+num(x.down,1)+' hr</td><td>'+num(x.parts,1)+'</td><td>'+esc(x.constraint||'—')+'</td><td><button class="btn small" onclick="editMachine(\''+x.id+'\')">Edit</button></td></tr>'}).join(''):'<tr><td colspan="8" class="empty">Add a machine or production cell.</td></tr>';
 }
+function partCost(x,shock={},batchOverride){
+ const batch=Math.max(1,Number(batchOverride||x.batchSize)||1);
+ const material=(Number(x.material)||0)*(1+(Number(shock.material)||0)/100);
+ const surcharge=Number(x.surcharge)||0;
+ const machine=(Number(x.machineHours)||0)*(Number(x.machineRate)||0)*(1+(Number(shock.machine)||0)/100);
+ const setup=(Number(x.setupHours)||0)/batch*(Number(x.setupRate)||0);
+ const labor=(Number(x.laborHours)||0)*(Number(x.laborRate)||0);
+ const overhead=(Number(x.overhead)||0)*(1+(Number(shock.overhead)||0)/100);
+ const total=material+surcharge+machine+setup+labor+overhead;
+ const adjusted=total/Math.max(.01,1-(Number(x.scrapRate)||0)/100);
+ const net=(Number(x.sellingPrice)||0)-(Number(x.packaging)||0)-(Number(x.freight)||0);
+ const profit=net-adjusted,margin=net?profit/net*100:0,should=Number(x.shouldCost)||0;
+ return {material,surcharge,machine,setup,labor,overhead,total,adjusted,net,profit,margin,variance:should?(adjusted-should)/should*100:0,scrapPenalty:adjusted-total}
+}
+function renderProfitability(){
+ if(!data.profitability)data.profitability=structuredClone(seed.profitability);
+ const parts=data.profitability.parts||[],target=Number(data.settings.marginTarget)||25,calcs=parts.map(x=>({x,c:partCost(x)}));
+ const revenue=calcs.reduce((s,o)=>s+o.c.net*(Number(o.x.annualVolume)||0),0),profit=calcs.reduce((s,o)=>s+o.c.profit*(Number(o.x.annualVolume)||0),0),weighted=revenue?profit/revenue*100:0;
+ const head=document.getElementById('profitHeadline');if(!head)return;
+ head.innerHTML=[['Annual net revenue',money(revenue),'Loaded portfolio','info'],['Weighted gross margin',num(weighted,1)+'%','Target '+num(target,1)+'%',weighted>=target?'good':'warn'],['Parts below target',calcs.filter(o=>o.c.margin<target).length,'Cost or pricing action','alert'],['Should-cost alerts',calcs.filter(o=>Math.abs(o.c.variance)>5).length,'Variance over 5%','warn']].map(x=>'<div class="stat '+x[3]+'"><div class="label">'+x[0]+'</div><div class="value">'+x[1]+'</div><div class="note">'+x[2]+'</div></div>').join('');
+ const maxVol=Math.max(1,...parts.map(x=>Number(x.annualVolume)||0));
+ marginMatrix.innerHTML='<div class="quadrant-label q-tl">Low Volume / High Margin<br>Niche or scale</div><div class="quadrant-label q-tr">High Volume / High Margin<br>Protect and grow</div><div class="quadrant-label q-bl">Low Volume / Low Margin<br>Kill or re-price</div><div class="quadrant-label q-br">High Volume / Low Margin<br>Critical risk</div>'+calcs.map(o=>{const left=6+88*(Number(o.x.annualVolume)||0)/maxVol,bot=8+84*Math.max(0,Math.min(50,o.c.margin))/50,color=o.c.margin>=target?'var(--green)':o.c.margin>=target-5?'var(--yellow)':'var(--red)';return '<button class="part-dot" data-id="'+esc(o.x.id)+'" onclick="openPartDetail(this.dataset.id)" style="left:'+left+'%;bottom:'+bot+'%;background:'+color+'"><span>'+esc(o.x.partId)+' · '+num(o.c.margin,1)+'%</span></button>'}).join('');
+ profitRows.innerHTML=calcs.length?[...calcs].sort((a,b)=>a.c.margin-b.c.margin).map(o=>'<tr><td><button class="link-title" data-id="'+esc(o.x.id)+'" onclick="openPartDetail(this.dataset.id)">'+esc(o.x.partId)+'</button><div class="subtext">'+esc(o.x.name)+'</div></td><td>'+num(o.x.annualVolume)+'</td><td>'+money(o.c.net)+'</td><td>'+money(o.c.adjusted)+'</td><td>'+money(o.c.profit)+'</td><td><span class="pill '+(o.c.margin>=target?'green':o.c.margin>=target-5?'yellow':'red')+'">'+num(o.c.margin,1)+'%</span></td><td><span class="pill '+(Math.abs(o.c.variance)>5?'red':'green')+'">'+(o.c.variance>=0?'+':'')+num(o.c.variance,1)+'%</span></td><td><button class="btn small" data-id="'+esc(o.x.id)+'" onclick="openPartModal(this.dataset.id)">Edit</button></td></tr>').join(''):'<tr><td colspan="8" class="empty">Add a part to begin.</td></tr>';
+ costRows.innerHTML=calcs.map(o=>'<tr><td><strong>'+esc(o.x.partId)+'</strong></td><td>'+money(o.c.material+o.c.surcharge)+'</td><td>'+money(o.c.machine)+'</td><td>'+money(o.c.setup)+'</td><td>'+money(o.c.labor)+'</td><td>'+money(o.c.overhead)+'</td><td>'+money(o.c.scrapPenalty)+'</td><td><strong>'+money(o.c.adjusted)+'</strong></td></tr>').join('');
+ const risks=calcs.filter(o=>o.c.margin<target).sort((a,b)=>a.c.margin-b.c.margin);
+ repricingList.innerHTML=risks.length?risks.slice(0,6).map(o=>{const required=(o.c.adjusted+Number(o.x.packaging)+Number(o.x.freight))/Math.max(.01,1-target/100);return '<div class="priority" style="grid-template-columns:8px 1fr auto"><div class="priority-bar" style="background:var(--red)"></div><div><h4>'+esc(o.x.partId)+'</h4><p>'+num(o.c.margin,1)+'% margin · Suggested price '+money(required)+'</p></div><span class="pill red">Review</span></div>'}).join(''):'<div class="empty">All loaded parts meet the target margin.</div>';
+ const old=moqPart.value;moqPart.innerHTML=parts.map(x=>'<option value="'+esc(x.id)+'">'+esc(x.partId)+' · '+esc(x.name)+'</option>').join('');if(parts.some(x=>x.id===old))moqPart.value=old;renderMoq();renderScenario()
+}
+function renderMoq(){
+ const x=(data.profitability?.parts||[]).find(v=>v.id===moqPart.value)||(data.profitability?.parts||[])[0];if(!x){moqResult.textContent='—';return}
+ const target=(Number(moqTarget.value)||0)/100;let q=1;for(;q<=100000&&partCost(x,{},q).margin/100<target;q++){}
+ moqResult.textContent=q<=100000?num(q)+' pieces':'No feasible MOQ';const current=partCost(x,{},x.batchSize);
+ moqExplanation.textContent=q<=100000?'Current batch '+num(x.batchSize)+' produces '+num(current.margin,1)+'% margin. At MOQ, setup is '+money(partCost(x,{},q).setup)+' per part.':'Selling price cannot support this margin even after setup is amortized.'
+}
+function renderScenario(){
+ const body=document.getElementById('scenarioRows');if(!body)return;const shock={material:Number(materialShock.value),machine:Number(machineShock.value),overhead:Number(overheadShock.value)},target=Number(data.settings.marginTarget)||25;
+ materialShockLabel.textContent=(shock.material>0?'+':'')+shock.material+'%';machineShockLabel.textContent=(shock.machine>0?'+':'')+shock.machine+'%';overheadShockLabel.textContent=(shock.overhead>0?'+':'')+shock.overhead+'%';
+ body.innerHTML=(data.profitability?.parts||[]).map(x=>{const a=partCost(x),b=partCost(x,shock),delta=b.margin-a.margin;return '<tr><td><strong>'+esc(x.partId)+'</strong><div class="subtext">'+esc(x.name)+'</div></td><td>'+num(a.margin,1)+'%</td><td>'+num(b.margin,1)+'%</td><td>'+(delta>=0?'+':'')+num(delta,1)+' pts</td><td><span class="pill '+(b.margin>=target?'green':b.margin>=target-5?'yellow':'red')+'">'+(b.margin>=target?'Protected':'Review')+'</span></td></tr>'}).join('')
+}
+function resetScenario(){materialShock.value=0;machineShock.value=0;overheadShock.value=0;renderScenario()}
+function setProfitView(view){document.querySelectorAll('.profit-view').forEach(x=>x.classList.toggle('active',x.id==='profit-'+view));document.querySelectorAll('[data-profit-view]').forEach(x=>x.classList.toggle('active',x.dataset.profitView===view));if(view==='scenario')renderScenario();if(view==='calculator')renderMoq()}
+document.addEventListener('click',e=>{const b=e.target.closest('[data-profit-view]');if(b)setProfitView(b.dataset.profitView)})
+
 function renderActions(){
   const q=(document.getElementById('actionSearch')?.value||'').toLowerCase(), owner=document.getElementById('actionOwner')?.value||'all';
   const owners=[...new Set(data.actions.map(x=>x.owner).filter(Boolean))].sort(), select=document.getElementById('actionOwner');
@@ -493,7 +536,7 @@ function renderActions(){
   document.getElementById('kanban').innerHTML=statuses.map(s=>{const items=filtered.filter(x=>x.status===s);return '<div class="column"><div class="column-head">'+s+'<span>'+items.length+'</span></div>'+items.map(x=>'<div class="task"><span class="pill '+(x.priority==='Critical'?'red':x.priority==='High'?'yellow':'gray')+'">'+x.priority+'</span><h4>'+esc(x.title)+'</h4><div class="task-foot"><span>'+esc(x.owner)+'</span><span>'+fmtDate(x.due)+'</span></div><div class="task-actions"><button onclick="moveAction(\''+x.id+'\',-1)">←</button><button onclick="editAction(\''+x.id+'\')">Edit</button><button onclick="moveAction(\''+x.id+'\',1)">→</button></div></div>').join('')+'</div>'}).join('');
 }
 function renderSettings(){const s=data.settings;['companyName','annualSales','marginTarget','machineCount','employeeCount','primaryMaterial'].forEach(id=>{const el=document.getElementById(id);if(el)el.value=s[id]??''})}
-function renderAll(){renderDashboard();renderInitiatives();renderKpis();renderPricing();renderMaterials();renderMachines();renderActions();renderSettings()}
+function renderAll(){renderDashboard();renderInitiatives();renderProfitability();renderKpis();renderPricing();renderMaterials();renderMachines();renderActions();renderSettings()}
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 
 function openInitiativeModal(x={}){document.getElementById('initiativeModalTitle').textContent=x.id?'Edit initiative':'New initiative';initiativeId.value=x.id||'';initiativeTitle.value=x.title||'';initiativeOwner.value=x.owner||'';initiativeCategory.value=x.category||'Profitability';initiativePriority.value=x.priority||'Medium';initiativeValue.value=x.value||0;initiativeDue.value=x.due||future(30);initiativeStatus.value=x.status||'Planned';initiativeProgress.value=x.progress||0;initiativeSummary.value=x.summary||'';initiativeImportance.value=x.importance||'';initiativeMilestone.value=x.milestone||'';initiativeModal.showModal()}
